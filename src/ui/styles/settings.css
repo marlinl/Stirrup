@@ -1,0 +1,159 @@
+/* Settings uses the same rail, resize handle and column geometry as chat. */
+[hidden] {
+  display: none !important;
+}
+.sidebar-content {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+#settings-navigation {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0 12px;
+  overflow-y: auto;
+}
+.settings-category {
+  text-align: left;
+  padding: 14px 16px;
+  border-radius: 12px;
+  color: var(--muted);
+}
+.settings-category[aria-current='page'] {
+  background: var(--blue-soft);
+  color: var(--blue);
+}
+.settings-panel {
+  grid-column: 4;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  padding: 0 28px;
+}
+.settings-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 100px;
+  flex-shrink: 0;
+}
+.settings-header h2 {
+  font-size: 1.3rem;
+  margin: 6px 0 0;
+}
+.settings-content {
+  overflow-y: auto;
+  padding: 12px 3px 40px;
+}
+.settings-card {
+  max-width: 800px;
+  padding: 26px;
+  border-radius: 22px;
+  margin-bottom: 20px;
+  background: var(--panel);
+}
+.settings-card h3 {
+  margin-top: 0;
+  font-size: 1rem;
+}
+.settings-card .muted,
+.settings-content > .muted {
+  line-height: 1.8;
+  font-size: 0.85rem;
+}
+.settings-facts {
+  display: grid;
+  grid-template-columns: minmax(100px, 1fr) minmax(0, 2fr);
+  gap: 20px;
+  font-size: 0.9rem;
+}
+.settings-facts dt {
+  color: var(--muted);
+}
+.settings-facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.setting-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.logout-confirmation {
+  border-top: 1px solid var(--line);
+  margin-top: 20px;
+  padding-top: 24px;
+}
+#logout-error {
+  color: var(--red, #b43c44);
+}
+.settings-agent-heading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.settings-agent-heading svg,
+.settings-agent-heading img {
+  width: 28px;
+  height: 28px;
+}
+#open-settings-drawer {
+  display: none;
+}
+@media (max-width: 1023px) {
+  .settings-panel {
+    grid-column: 2;
+    padding: 0 10px;
+  }
+  #open-settings-drawer {
+    display: grid;
+  }
+}
+@media (max-width: 600px) {
+  .settings-card {
+    padding: 18px;
+  }
+  .settings-facts {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+  .settings-facts dd {
+    margin-bottom: 12px;
+  }
+  .settings-card .setting-row {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+}
+
+.brand-codex {
+  display: inline-flex;
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+}
+.brand-codex img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.brand-codex .brand-dark {
+  display: none;
+}
+:root[data-theme='dark'] .brand-codex .brand-dark {
+  display: block;
+}
+:root[data-theme='dark'] .brand-codex .brand-light {
+  display: none;
+}
+.brand-dsh {
+  width: 27px;
+  height: 27px;
+  object-fit: contain;
+}
+:root[data-theme='dark'] .brand-dsh {
+  filter: invert(1);
+}

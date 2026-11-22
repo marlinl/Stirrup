@@ -1,0 +1,88 @@
+/* Login keeps all interaction in a single centered glass surface. */
+.login-page {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 20px;
+}
+.login-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 26px;
+  font-weight: 650;
+  letter-spacing: -1px;
+  margin-bottom: 32px;
+}
+.login-brand svg {
+  width: 28px;
+  height: 28px;
+  color: var(--blue);
+}
+.login-card {
+  width: min(430px, 100%);
+  border-radius: 28px;
+  padding: 36px 36px 28px;
+  text-align: center;
+}
+.login-symbol,
+.welcome-symbol {
+  display: grid;
+  place-items: center;
+  margin: 0 auto 24px;
+  color: #668eeb;
+  background: linear-gradient(145deg, #ffffffbd, #c9daff57);
+  border: 1px solid #ffffff80;
+  box-shadow:
+    inset 0 1px 1px #fffc,
+    0 8px 24px #6d8acb12;
+  border-radius: 22px;
+  width: 64px;
+  height: 64px;
+}
+.login-symbol svg {
+  width: 30px;
+  height: 30px;
+}
+.login-card .eyebrow {
+  font-size: 11px;
+  margin-bottom: 12px;
+}
+.login-card h1 {
+  font-size: 23px;
+  letter-spacing: -0.5px;
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+.login-card .intro {
+  margin-bottom: 30px;
+}
+.login-card form {
+  text-align: left;
+}
+.login-card label {
+  display: block;
+  font-size: 0.875rem;
+  margin: 18px 0 8px;
+}
+.login-submit {
+  width: 100%;
+  margin-top: 24px;
+}
+.login-note {
+  font-size: 0.75rem;
+  color: var(--muted);
+  margin: 24px 0 0;
+  line-height: 1.8;
+}
+.login-footer {
+  font-size: 0.75rem;
+  color: var(--muted);
+  margin: 26px 0 0;
+}
+.login-footer span {
+  padding: 0 10px;
+  color: var(--subtle);
+}

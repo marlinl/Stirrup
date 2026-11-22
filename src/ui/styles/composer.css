@@ -1,0 +1,249 @@
+/* The composer floats above content, while message text stays on a stable reading surface. */
+.composer-region {
+  position: relative;
+  max-width: 900px;
+  width: 100%;
+  margin: 0 auto;
+  flex-shrink: 0;
+}
+.composer {
+  border-radius: 22px;
+  padding: 18px 18px 12px;
+  background: var(--glass);
+}
+.composer:focus-within {
+  border-color: #86a7ee80;
+  box-shadow:
+    var(--highlight),
+    0 5px 22px #729bea0d;
+}
+.composer textarea {
+  resize: none;
+  overflow-y: auto;
+  display: block;
+  min-height: 62px;
+  max-height: 180px;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  font-size: 1rem;
+  line-height: 1.7;
+  outline: none;
+  padding: 0 2px;
+}
+.composer-footer {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 6px;
+}
+.composer-actions {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+.session-options {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  min-width: 0;
+  flex: 1 1 330px;
+}
+.session-option {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+  max-width: min(220px, 100%);
+  font-size: 0.6875rem;
+  color: var(--muted);
+}
+.session-option select,
+.option-switch,
+.option-unavailable {
+  font-size: 0.75rem;
+  min-height: 32px;
+  max-width: 100%;
+  border-radius: 9px;
+  border: 1px solid var(--line);
+  background: var(--field);
+  color: var(--ink);
+  padding: 6px 9px;
+}
+.session-option select {
+  width: auto;
+  max-width: min(220px, 100%);
+  text-overflow: ellipsis;
+}
+.option-unavailable {
+  display: flex;
+  align-items: center;
+  color: var(--muted);
+}
+.option-switch[aria-checked='true'] {
+  color: var(--blue);
+  background: var(--blue-soft);
+}
+.option-switch::before {
+  content: '';
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  margin-right: 6px;
+  opacity: 0.6;
+}
+.session-more {
+  position: static;
+  font-size: 0.75rem;
+  color: var(--muted);
+  padding: 8px 0;
+}
+.session-more summary {
+  cursor: pointer;
+}
+.session-more-panel {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  right: 0;
+  z-index: 5;
+  width: min(280px, calc(100vw - 110px));
+  max-height: 35dvh;
+  overflow: auto;
+  padding: 14px;
+  display: grid;
+  gap: 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--solid);
+  box-shadow: var(--shadow);
+}
+.config-status,
+.config-error,
+.session-auth {
+  font-size: 0.75rem;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.config-status {
+  color: var(--muted);
+  margin-top: 8px;
+}
+.config-status:empty,
+.session-auth:empty {
+  display: none;
+}
+.config-error {
+  color: #b14a55;
+  margin-top: 8px;
+}
+.config-error button {
+  margin-left: 10px;
+  padding: 4px 8px;
+}
+.session-auth {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  color: var(--muted);
+}
+.session-auth span {
+  flex-basis: 100%;
+}
+.session-options :focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 3px;
+}
+.send-button {
+  padding: 9px 19px;
+  font-size: 0.875rem;
+  border-radius: 12px;
+}
+.stop-button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  border-radius: 10px;
+  padding: 8px 12px;
+}
+.stop-button svg {
+  width: 15px;
+  height: 15px;
+}
+.composer-note {
+  font-size: 0.75rem;
+  text-align: center;
+  color: var(--subtle);
+  margin: 12px 0 8px;
+}
+.session-hint {
+  color: var(--muted);
+  font-size: 0.75rem;
+  line-height: 1.6;
+  margin-bottom: 10px;
+  text-align: center;
+}
+.session-hint:empty {
+  display: none;
+}
+.new-content {
+  position: absolute;
+  bottom: calc(100% + 12px);
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 8px 15px;
+  border-radius: 24px;
+  border: 1px solid var(--line);
+  background: var(--solid);
+  box-shadow: var(--shadow);
+  color: var(--muted);
+  white-space: nowrap;
+  font-size: 0.75rem;
+}
+.permissions {
+  margin-bottom: 12px;
+  max-height: 32dvh;
+  overflow: auto;
+  border-radius: 16px;
+  background: var(--solid);
+  border: 1px solid #cdac714a;
+  padding: 15px 18px;
+}
+.permission-card + .permission-card {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+.permission-card strong {
+  display: block;
+  font-size: 0.875rem;
+  margin-bottom: 10px;
+}
+.permission-card summary {
+  font-size: 0.75rem;
+  cursor: pointer;
+  color: var(--muted);
+  margin: 8px 0;
+}
+.permission-card button {
+  margin: 6px 8px 0 0;
+  font-size: 0.8125rem;
+}
+.save-error {
+  color: #b14a55;
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  padding: 10px;
+  background: #ca536311;
+  border-radius: 8px;
+  margin: 10px 0 0;
+}
