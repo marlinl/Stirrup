@@ -126,3 +126,9 @@ Passkey 改造保留既有项目与会话文件。真实设备的通行密钥创
 - 根据用户指示，将当前 npm/TypeScript 项目、Codex/DSH ACP、Passkey、SQLite、三栏设置和 007 输入区实现及设计文档整理为 Git 提交。远端为 `origin`（`marlinl/Stirrup`），目标分支为 `master`；推送前核对远端仍为初始提交 `8e680cb`，与本地 HEAD 一致。
 - 显式选择项目文件，排除 `.env`、`.local/`、`node_modules/`、`dist/` 和 `.idea/`。94 个候选文件的常见凭据模式检查未发现匹配；本记录不代表完整安全审计。
 - 本步骤未修改运行代码，沿用前一条记录的构建及测试结果，不重复执行测试；提交与远端推送结果在完成后追加。
+
+## 2026-11-22 23:51:53 +08:00 · 项目实现已推送远端
+
+- 已创建实现提交 `68d275e`（`feat: implement local ACP workspace and inline session controls`），包含 94 个项目文件；暂存内容空白检查通过。
+- `git push -u origin master` 成功，远端 `master` 从 `8e680cb` 快进到 `68d275e`，本地分支已跟踪 `origin/master`。未强制推送，未修改服务状态。
+- 本条作为补充记录提交同步远端；保留 `.idea/` 为未跟踪的本地文件，私有配置、数据库、构建输出和依赖目录未纳入提交。
