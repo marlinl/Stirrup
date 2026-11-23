@@ -28,7 +28,7 @@ export function renderLogin(
       </form>
       <p class="login-note" id="passkey-note"></p>
     </section>
-    <p class="login-footer">Codex <span>·</span> DeepSeek Harness <span>·</span> 一个专注的空间</p>
+    <p class="login-footer">Codex <span>·</span> DeepSeek Harness <span>·</span> Antigravity <span>·</span> 一个专注的空间</p>
   </main>`;
   el('passkey-note').textContent = !available
     ? '请使用支持 Passkey 的浏览器，通过 localhost 打开工作空间。'

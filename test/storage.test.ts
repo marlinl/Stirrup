@@ -218,3 +218,51 @@ test('partial candidate is ignored and incomplete final database is rejected', (
   assert.throws(() => new WorkspaceStore(other));
   assert.equal(existsSync(join(dir, '.storage.lock')), false);
 });
+
+test('v1 upgrade preserves old messages and revisions and permits AGY after reopen', (t) => {
+  const root = rootFor(t);
+  const directory = join(root, '.local/web');
+  const filename = join(directory, DATABASE_NAME);
+  const db = new DatabaseConnection(filename, true);
+  const schema = readFileSync(new URL('../local/storage/schema.sql', import.meta.url), 'utf8')
+    .replace("'codex', 'dsh', 'agy'", "'codex', 'dsh'");
+  db.db.exec(schema);
+  const project = randomUUID();
+  const conversation = randomUUID();
+  db.db.prepare('INSERT INTO schema_migrations VALUES (1, 123, ?)').run('original-digest');
+  db.db.prepare('INSERT INTO projects VALUES (?, ?, ?, 0)').run(project, 'project', root);
+  db.db.prepare('INSERT INTO conversations VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+    .run(conversation, project, 'codex', 'history', 'provider-context', 'draft', 123, 7);
+  db.db.prepare('INSERT INTO messages VALUES (?, ?, ?, ?, ?)')
+    .run(conversation, 'm1', 0, 'assistant', JSON.stringify({ text: 'retained' }));
+  db.db.exec(`CREATE TRIGGER fail_upgrade BEFORE INSERT ON schema_migrations
+    WHEN NEW.version=2 BEGIN SELECT RAISE(ABORT, 'injected migration failure'); END`);
+  db.close();
+  assert.throws(() => new WorkspaceStore(root), /injected migration failure/);
+  const failed = new DatabaseConnection(filename);
+  assert.equal(failed.db.prepare('SELECT count(*) AS n FROM schema_migrations').get()?.n, 1);
+  assert.equal(failed.db.prepare('SELECT count(*) AS n FROM messages').get()?.n, 1);
+  assert.match(String(failed.db.prepare("SELECT sql FROM sqlite_master WHERE name='conversations'").get()?.sql),
+    /'codex', 'dsh'\)/);
+  failed.db.exec('DROP TRIGGER fail_upgrade');
+  failed.close();
+  const store = new WorkspaceStore(root);
+  const old = store.conversation(conversation);
+  assert.equal(old.messages[0].text, 'retained');
+  assert.equal(old.revision, 7);
+  assert.equal(old.draft, 'draft');
+  assert.equal(old.providerSessionId, 'provider-context');
+  assert.equal(store.connection.db.prepare('SELECT legacy_digest FROM schema_migrations WHERE version=1').get()?.legacy_digest, 'original-digest');
+  for (const agentId of ['agy']) {
+    const c = store.createConversation({ projectId: project, agentId });
+    store.saveConversation(c.id, { ...c, messages: [{ id: 'reply', kind: 'assistant', text: agentId }] });
+  }
+  assert.throws(() => store.createConversation({ projectId: project, agentId: 'toString' }));
+  assert.equal(store.connection.db.prepare('PRAGMA foreign_keys').get()?.foreign_keys, 1);
+  store.close();
+  const reopened = new WorkspaceStore(root);
+  t.after(() => reopened.close());
+  assert.deepEqual(reopened.conversation(conversation), old);
+  assert.equal(reopened.connection.db.prepare('SELECT count(*) AS n FROM conversations').get()?.n, 2);
+  reopened.connection.verify();
+});

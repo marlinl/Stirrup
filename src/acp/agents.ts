@@ -1,6 +1,6 @@
 import type { SessionConfigOption } from '@agentclientprotocol/sdk';
 
-/** The two supported local ACP agents; neither endpoint accepts a page-supplied command. */
+/** The supported local ACP agents; no endpoint accepts a page-supplied command. */
 export const AGENTS = {
   codex: {
     name: 'Codex',
@@ -15,14 +15,27 @@ export const AGENTS = {
     connectedHelp:
       '创建会话后即可发送消息，并选择代理提供的模型和推理配置。工具权限由 DSH 本地策略决定。',
   },
+  agy: {
+    name: 'Antigravity',
+    endpoint: '/acp/agy',
+    authHelp: '先在本机运行 agy 或 agy acp --login 完成认证，再连接会话。',
+    connectedHelp: '创建会话后发送消息；工具权限由 Antigravity CLI 本地策略及当前模式决定。',
+  },
 } as const;
 
 export type AgentId = keyof typeof AGENTS;
+export const AGENT_IDS = Object.keys(AGENTS) as AgentId[];
+
+/** Accept only own registry keys at URL and persistence boundaries. */
+export function isAgentId(value: unknown): value is AgentId {
+  return typeof value === 'string' && Object.hasOwn(AGENTS, value);
+}
 
 /** Known IDs supplement ACP categories; values always come from the active session. */
 const CONFIG_IDS = {
   codex: { model: 'model', effort: 'reasoning_effort', fast: 'fast-mode' },
   dsh: { model: 'model', effort: 'reasoning_effort', fast: undefined },
+  agy: { model: undefined, effort: undefined, fast: undefined },
 } as const;
 
 /** Partition advertised options, accepting only Codex's verified speed switch contract for Fast mode. */

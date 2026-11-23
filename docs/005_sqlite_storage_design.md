@@ -19,7 +19,7 @@
 | 短时绑定授权散列 | 原 `.local/web/passkey-enrollment.json` | 维持独立认证生命周期，不作为聊天数据迁移 |
 | 主题、减少效果、栏宽、最近选择 | 浏览器 `localStorage` | 属于当前浏览器偏好，006 延续此约定 |
 | 滚动位置、展开项、连接状态 | 当前工作台视图内存 | 不制造持久化的“已连接”状态 |
-| Codex / DSH 自身的上下文、认证与会话文件 | 各 Agent 自己的存储 | DSH 默认仍为 `.local/dsh/`；不从其内部文件导入历史 |
+| Codex / DSH / Antigravity 自身的上下文、认证与会话文件 | 各 Agent 自己的存储 | DSH 默认仍为 `.local/dsh/`；不从其内部文件导入历史 |
 
 保存页面历史不代表支持 Agent 上下文恢复。继续对话仍使用对应项目与 Agent 的 `providerSessionId`，并检查 load / resume 能力。
 
@@ -44,11 +44,11 @@ PRAGMA busy_timeout = 1000;
 
 WAL 仍然只有一个同时写入者，可能产生 `stirrup.sqlite-wal`、`stirrup.sqlite-shm`；数据库仅用于本机文件系统。设置页面与备份流程不能把辅助文件当作可随意删除的缓存。[SQLite WAL 说明](https://sqlite.org/wal.html)
 
-## 表结构 v1
+## 表结构 v2
 
 固定检索字段使用普通列；可变消息内容使用 JSON 文本。不使用 JSONB，便于检查、导出与复用当前 TypeScript 结构。SQLite 提供 `json_valid()`、`json_extract()` 等函数，可对 `TEXT` 中的 JSON 校验和查询；JSONB 是另一种二进制表示，不是本方案的前提。[SQLite JSON 文档](https://sqlite.org/json1.html)
 
-以下是 v1 建表 SQL，代码唯一来源为 `local/storage/schema.sql`；版本登记与业务数据迁移必须在同一初始化事务提交。
+以下是 v2 建表 SQL，代码唯一来源为 `local/storage/schema.sql`；版本登记与业务数据迁移必须在同一初始化事务提交。
 
 ```sql
 CREATE TABLE schema_migrations (
@@ -67,7 +67,7 @@ CREATE TABLE projects (
 CREATE TABLE conversations (
   id                  TEXT PRIMARY KEY NOT NULL,
   project_id          TEXT NOT NULL REFERENCES projects(id) ON DELETE RESTRICT,
-  agent_id            TEXT NOT NULL CHECK (agent_id IN ('codex', 'dsh')),
+  agent_id            TEXT NOT NULL CHECK (agent_id IN ('codex', 'dsh', 'agy')),
   title               TEXT NOT NULL,
   provider_session_id TEXT,
   draft               TEXT NOT NULL DEFAULT '',
@@ -149,14 +149,14 @@ CREATE TABLE messages (
 ### 建库与切换
 
 1. 保留原文件，并把本次源清单、摘要和源文件复制到 `.local/web/backups/json-<时间戳>/`；仅含项目和对话，不复制凭据文件。
-2. 在同目录新建临时候选数据库，执行建表及全部导入；项目、对话、消息、`schema_migrations` v1 标记一次事务提交。`legacy_digest` 记录源清单摘要。
+2. 在同目录新建临时候选数据库，执行建表及全部导入；项目、对话、消息、`schema_migrations` v1/v2 标记一次事务提交。`legacy_digest` 记录源清单摘要。
 3. 验证项目/会话/逐会话消息数量、原 ID、顺序、内容、草稿、时间和版本；执行 `PRAGMA foreign_key_check` 与 `PRAGMA integrity_check`。比较使用解析后的结构，不要求 JSON 空格或对象键顺序相同。
 4. 复核源清单未改变，完成 checkpoint，关闭候选连接；没有未合并 WAL 数据时才原子发布为 `stirrup.sqlite`。实现采用同文件系统硬链接发布后移除临时候选名称，确保目标存在时失败，避免普通 rename 覆盖已有文件。
 5. 下次启动只使用已验证数据库，旧 JSON 保留为历史源，不再读写、不做双写。
 
 重复运行：已有完成标记且源摘要相同则报告“已迁移”，不重复导入；目标存在而标记不完整、来源不同或结构版本未知时拒绝覆盖。中断留下的临时候选库不能被服务自动选中，应清理/重建候选后重试。
 
-没有旧项目/对话、也没有数据库的全新安装，可以直接创建 v1 空库及默认项目。已有 JSON 而没有数据库时提示先迁移；已有有效数据库时只以数据库为准。禁止创建空库遮住待迁移历史。
+没有旧项目/对话、也没有数据库的全新安装，可以直接创建 v2 空库及默认项目。已有 JSON 而没有数据库时提示先迁移；已有有效数据库时只以数据库为准。禁止创建空库遮住待迁移历史。
 
 ## 备份、回滚与关闭
 
@@ -175,7 +175,7 @@ CREATE TABLE messages (
 | 模块 | 当前职责 |
 | --- | --- |
 | `local/storage/database.ts` | 打开连接、配置 PRAGMA、版本检查、短事务与关闭 |
-| `local/storage/schema.sql` | 唯一的 v1 建表 SQL |
+| `local/storage/schema.sql` | 当前 v2 建表 SQL |
 | `local/storage/workspace-store.ts` | 使用 SQL 映射，保留调用契约 |
 | `local/storage/legacy-json.ts` | 仅供离线导入/回退使用的旧格式校验与转换 |
 | `local/cli/migrate-storage.ts` | 预检、备份、导入、导出、核验及明确结果 |
@@ -193,3 +193,13 @@ CREATE TABLE messages (
 7. 重启后能读到已提交历史；不自动恢复内存 Session、不批准旧权限请求。
 
 迁移执行、实际数据核验及测试结果统一记录在 [CHANGELOG.md](../CHANGELOG.md)。
+
+相关 Agent 接入契约：[008 · Antigravity](008_agy_acp.md)。
+
+## SQLite v1 → v2 升级契约
+
+当前版本为 2；`schema_migrations` 保留版本 1 的原始导入摘要并追加版本 2。全新数据库同时登记两个版本。Web 启动和离线存储命令在目录锁内升级已有 v1 数据库。
+
+升级先校验完整性，在事务外临时关闭外键检查，再在单个事务中重建 `conversations` 的 Agent CHECK 约束，允许 `codex`、`dsh`、`agy`。复制所有字段，保留消息表、项目绑定、会话 ID、providerSessionId、草稿、时间及 revision；重建索引并检查外键后才登记版本和提交。失败回滚，最终恢复外键检查；未知或不完整版本拒绝打开。SQL 位于 `local/storage/002_agents.sql`。
+
+升级前停止所有服务与离线命令，备份完整 `.local/web/`。旧版代码不支持 v2，不能直接降版本打开；需要回退时停服保留当前数据，恢复升级前完整备份及配套代码。升级后产生的新数据不在旧备份内，应先导出留存。旧版 JSON 导入器不认识新增 Agent，因此带 AGY 会话的导出不能直接交给旧版程序。

@@ -13,7 +13,7 @@ import { dirname, join } from 'node:path';
 import { HttpError } from '../errors.ts';
 
 export const DATABASE_NAME = 'stirrup.sqlite';
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 /** Exclusively own a data directory across the web runtime and offline tools; stale locks require operator inspection. */
 export function lockStorage(directory: string): () => void {
@@ -86,8 +86,32 @@ export class DatabaseConnection {
       insert();
       this.db
         .prepare('INSERT INTO schema_migrations VALUES (?, ?, ?)')
-        .run(SCHEMA_VERSION, Date.now(), legacyDigest);
+        .run(1, Date.now(), legacyDigest);
+      this.db.prepare('INSERT INTO schema_migrations VALUES (?, ?, NULL)').run(2, Date.now());
     });
+  }
+
+  /** Expand the v1 Agent constraint atomically, preserving messages and the original import digest. */
+  upgrade(): void {
+    const versions = this.db.prepare('SELECT version FROM schema_migrations ORDER BY version').all();
+    if (versions.length !== 1 || versions[0].version !== 1) return;
+    if (
+      this.db.prepare('PRAGMA integrity_check').get()?.integrity_check !== 'ok' ||
+      this.db.prepare('PRAGMA foreign_key_check').all().length
+    )
+      throw new Error('数据库完整性校验失败');
+    // SQLite table rebuild requires foreign keys disabled outside the transaction.
+    this.db.exec('PRAGMA foreign_keys=OFF');
+    try {
+      this.transaction(() => {
+        this.db.exec(readFileSync(new URL('./002_agents.sql', import.meta.url), 'utf8'));
+        if (this.db.prepare('PRAGMA foreign_key_check').all().length)
+          throw new Error('数据库迁移外键校验失败');
+        this.db.prepare('INSERT INTO schema_migrations VALUES (?, ?, NULL)').run(2, Date.now());
+      });
+    } finally {
+      this.db.exec('PRAGMA foreign_keys=ON');
+    }
   }
 
   /** Reject incomplete, newer or corrupt databases instead of presenting an empty workspace. */
@@ -95,7 +119,7 @@ export class DatabaseConnection {
     const versions = this.db
       .prepare('SELECT version FROM schema_migrations ORDER BY version')
       .all();
-    if (versions.length !== 1 || versions[0].version !== SCHEMA_VERSION)
+    if (versions.length !== SCHEMA_VERSION || versions.some((row, index) => row.version !== index + 1))
       throw new Error('数据库结构版本不受支持或迁移未完成');
     if (
       this.db.prepare('PRAGMA integrity_check').get()?.integrity_check !== 'ok' ||

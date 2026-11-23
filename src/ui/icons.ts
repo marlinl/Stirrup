@@ -22,7 +22,9 @@ const paths = {
 } as const;
 
 /** Render curated vector paths; agent or user strings never become SVG markup. */
-export function icon(name: keyof typeof paths | 'codex' | 'dsh'): string {
+export function icon(name: keyof typeof paths | 'codex' | 'dsh' | 'agy'): string {
+  if (name === 'agy')
+    return `<span aria-hidden="true">A</span>`;
   if (name === 'codex')
     return `<span class="brand-codex" aria-hidden="true"><img class="brand-light" src="${codexLight}" alt=""><img class="brand-dark" src="${codexDark}" alt=""></span>`;
   if (name === 'dsh') return `<img class="brand-dsh" src="${dsh}" alt="" aria-hidden="true">`;

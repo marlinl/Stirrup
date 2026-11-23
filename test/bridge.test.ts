@@ -7,7 +7,7 @@ import { WebSocket } from 'ws';
 import { attachAcpBridge } from '../local/acp/bridge';
 import { agentLaunch } from '../local/acp/launch';
 import { openWebSocket } from '../src/acp/websocket';
-import { AGENTS, type AgentId } from '../src/acp/agents';
+import { AGENT_IDS, AGENTS, type AgentId } from '../src/acp/agents';
 
 /** Start a real loopback bridge with a harmless byte-echo child in place of the chosen ACP agent. */
 async function setup(t: TestContext, agentId: AgentId = 'codex') {
@@ -43,7 +43,7 @@ async function setup(t: TestContext, agentId: AgentId = 'codex') {
 }
 
 test('bridge rejects cross-origin and missing-origin upgrades', { timeout: 5000 }, async (t) => {
-  for (const id of ['codex', 'dsh'] as const) {
+  for (const id of AGENT_IDS) {
     const h = await setup(t, id);
     for (const origin of ['https://untrusted.example', undefined]) {
       const socket = new WebSocket(h.url, { origin });
@@ -54,7 +54,7 @@ test('bridge rejects cross-origin and missing-origin upgrades', { timeout: 5000 
   }
 });
 
-for (const id of ['codex', 'dsh'] as const)
+for (const id of AGENT_IDS)
   test(
     `${id} route streams bytes and reaps its own process after disconnect`,
     { timeout: 5000 },
@@ -142,3 +142,11 @@ test(
     await assert.rejects(writer.write(bytes), /断开/);
   },
 );
+
+test('AGY launch uses fixed ACP arguments and local executable overrides', () => {
+  assert.deepEqual(agentLaunch('agy', '/workspace', {}).command, ['agy', 'acp']);
+  assert.deepEqual(agentLaunch('agy', '/workspace', { AGY_PATH: '/Apps/My AGY/agy' }).command,
+    ['/Apps/My AGY/agy', 'acp']);
+  assert.deepEqual(agentLaunch('agy', '/workspace', { AGY_PATH: '  ' }).command, ['agy', 'acp']);
+  assert.throws(() => agentLaunch('unknown' as AgentId, '/workspace', {}), /Unsupported/);
+});

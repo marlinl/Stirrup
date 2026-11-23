@@ -19,7 +19,7 @@ src/
 │   ├── models.ts            # 项目、对话、消息、登录状态的数据契约
 │   └── workspace.ts         # 会话操作、独立 ACP 连接、输出合并与串行保存
 ├── acp/
-│   ├── agents.ts            # Codex / DSH 固定能力描述与入口
+│   ├── agents.ts            # Codex / DSH / Antigravity 固定能力描述与入口
 │   ├── client.ts            # ACP 协议状态机、轮次、审批与恢复
 │   └── websocket.ts         # WebSocket 与 NDJSON 字节流转换
 └── ui/
@@ -48,7 +48,7 @@ local/
 │   └── sessions.ts          # 登录 Session、Cookie、.env 有效期、过期回收
 ├── storage/
 │   ├── database.ts          # SQLite 连接、PRAGMA、事务、目录锁与关闭
-│   ├── schema.sql           # v1 表结构
+│   ├── schema.sql           # v2 表结构
 │   ├── workspace-store.ts  # 项目与会话 SQL 映射、版本冲突、统计
 │   ├── records.ts          # 消息字段校验
 │   └── legacy-json.ts      # 离线 JSON 迁移、备份、核验与导出
@@ -103,3 +103,5 @@ npm test
 ```
 
 自动测试不能替代原生 Passkey、浏览器视觉或真实模型操作验收。具体执行结果统一记录在 [CHANGELOG.md](../CHANGELOG.md)。
+
+相关 Agent 接入契约：[008 · Antigravity](008_agy_acp.md)。

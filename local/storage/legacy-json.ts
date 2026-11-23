@@ -1,3 +1,4 @@
+import { isAgentId } from '../../src/acp/agents.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import {
   existsSync,
@@ -62,7 +63,7 @@ export function validateLegacy(input: Workspace): Workspace {
     if (
       !uuid.test(String(row.id)) ||
       !projects.some((p) => p.id === row.projectId) ||
-      !['codex', 'dsh'].includes(String(row.agentId)) ||
+      !isAgentId(row.agentId) ||
       !Number.isSafeInteger(row.updatedAt) ||
       !Number.isSafeInteger(row.revision) ||
       Number(row.revision) < 0 ||
@@ -228,6 +229,7 @@ export function migrateStorage(directory: string): {
     const target = join(directory, DATABASE_NAME);
     if (existsSync(target)) {
       connection = new DatabaseConnection(target);
+      connection.upgrade();
       connection.verify();
       const marker = connection.db
         .prepare('SELECT legacy_digest FROM schema_migrations WHERE version=1')
@@ -288,6 +290,7 @@ export function exportStorage(directory: string): string {
   let connection: DatabaseConnection | undefined;
   try {
     connection = new DatabaseConnection(join(directory, DATABASE_NAME));
+    connection.upgrade();
     connection.verify();
     const data = readDatabase(connection);
     const output = join(directory, 'backups', `export-${Date.now()}-${randomUUID()}`);

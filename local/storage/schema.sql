@@ -14,7 +14,7 @@ CREATE TABLE projects (
 CREATE TABLE conversations (
   id                  TEXT PRIMARY KEY NOT NULL,
   project_id          TEXT NOT NULL REFERENCES projects(id) ON DELETE RESTRICT,
-  agent_id            TEXT NOT NULL CHECK (agent_id IN ('codex', 'dsh')),
+  agent_id            TEXT NOT NULL CHECK (agent_id IN ('codex', 'dsh', 'agy')),
   title               TEXT NOT NULL,
   provider_session_id TEXT,
   draft               TEXT NOT NULL DEFAULT '',

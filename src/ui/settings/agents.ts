@@ -1,4 +1,4 @@
-import { AGENTS, type AgentId } from '../../acp/agents';
+import { AGENT_IDS, AGENTS, type AgentId } from '../../acp/agents';
 import type { WorkspaceController } from '../../domain/workspace';
 import { icon } from '../icons';
 
@@ -9,7 +9,7 @@ export function renderAgents(
   choose: (id: AgentId) => void,
 ): () => void {
   host.innerHTML =
-    (['codex', 'dsh'] as const)
+    AGENT_IDS
       .map(
         (id) => `<section class="settings-card glass">
     <h3 class="settings-agent-heading">${icon(id)}${AGENTS[id].name}</h3><p id="status-${id}"></p><p class="muted" id="capabilities-${id}"></p>
@@ -21,7 +21,7 @@ export function renderAgents(
     button.addEventListener('click', () => choose(button.dataset.showAgent as AgentId));
   /** Refresh counts and actual recovery capabilities without replacing focused buttons. */
   function refresh(): void {
-    for (const id of ['codex', 'dsh'] as const) {
+    for (const id of AGENT_IDS) {
       const states = workspace.conversations
         .filter((c) => c.agentId === id)
         .map((c) => workspace.live.get(c.id))

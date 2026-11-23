@@ -1,3 +1,4 @@
+import { isAgentId } from '../../src/acp/agents.ts';
 import { randomUUID } from 'node:crypto';
 import { existsSync, realpathSync, statSync } from 'node:fs';
 import { basename, isAbsolute, join } from 'node:path';
@@ -32,6 +33,7 @@ export class WorkspaceStore {
             .prepare('INSERT INTO projects VALUES (?, ?, ?, 0)')
             .run(randomUUID(), basename(root), realpathSync(root));
         });
+      connection.upgrade();
       connection.verify();
       this.connection = connection;
     } catch (error) {
@@ -141,7 +143,7 @@ export class WorkspaceStore {
   createConversation(input: Record<string, unknown>): Conversation {
     if (
       !this.projects.some((item) => item.id === input.projectId) ||
-      !['codex', 'dsh'].includes(String(input.agentId))
+      !isAgentId(input.agentId)
     )
       throw new HttpError(400, '项目或 Agent 无效');
     const record: Conversation = {

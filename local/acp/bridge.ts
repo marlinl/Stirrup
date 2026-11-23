@@ -33,7 +33,7 @@ function stopProcess(child: ChildProcess): void {
   setTimeout(() => signal('SIGKILL'), 1500).unref();
 }
 
-/** Attach the two fixed ACP routes to a local server; injected launches are only for local tests. */
+/** Attach the fixed ACP routes to a local server; injected launches are only for local tests. */
 export function attachAcpBridge(
   server: HttpServer,
   cwd: string,

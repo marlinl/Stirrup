@@ -1,3 +1,4 @@
+import { AGENTS, AGENT_IDS } from '../../acp/agents';
 import { icon } from '../icons';
 import { el } from '../dom';
 /** Mount the stable workspace regions; the workspace page owns event binding and updates. */
@@ -6,12 +7,9 @@ export function renderWorkspaceShell(): void {
     <nav class="agent-rail glass" aria-label="Agent 导航">
       <div class="rail-logo" title="Stirrup">${icon('logo')}</div>
       <div class="rail-agents">
-        <button class="agent-button" data-agent="codex" aria-label="Codex" title="Codex">
-          ${icon('codex')}<span class="agent-badge" hidden></span>
-        </button>
-        <button class="agent-button" data-agent="dsh" aria-label="DSH" title="DeepSeek Harness">
-          ${icon('dsh')}<span class="agent-badge" hidden></span>
-        </button>
+        ${AGENT_IDS.map((id) => `<button class="agent-button" data-agent="${id}" aria-label="${AGENTS[id].name}" title="${AGENTS[id].name}">
+          ${icon(id)}<span class="agent-badge" hidden></span>
+        </button>`).join('')}
       </div>
       <button
         id="settings"

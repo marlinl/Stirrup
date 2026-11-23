@@ -162,6 +162,12 @@ test(
       .dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
     await until(() => !!doc.getElementById('workspace'));
     assert.equal(window.location.pathname, '/chat');
+    for (const agent of ['agy']) {
+      (doc.querySelector(`[data-agent="${agent}"]`) as unknown as HTMLButtonElement).click();
+      assert.equal(new URLSearchParams(window.location.search).get('agent'), agent);
+      assert.equal(doc.querySelectorAll('.session-row').length, 0);
+    }
+    (doc.querySelector('[data-agent="codex"]') as unknown as HTMLButtonElement).click();
     (doc.querySelector('.session-row') as unknown as HTMLButtonElement).click();
     assert.equal(
       (doc.getElementById('prompt') as unknown as HTMLTextAreaElement).value,

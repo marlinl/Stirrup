@@ -1,3 +1,4 @@
+import { isAgentId } from '../acp/agents';
 import type { AgentId } from '../acp/agents';
 import type { Preferences } from './preferences';
 
@@ -22,7 +23,7 @@ export function readChatRoute(preferences: Preferences): {
 } {
   const params = new URLSearchParams(location.search);
   const requested = params.get('agent');
-  const agent = requested === 'codex' || requested === 'dsh' ? requested : preferences.agent;
+  const agent = isAgentId(requested) ? requested : preferences.agent;
   return {
     agent,
     session: params.get('session') ?? preferences.selected[agent],
@@ -79,7 +80,7 @@ export function workspaceDestination(): string {
   const params = new URLSearchParams(location.search);
   const safe = new URLSearchParams();
   const agent = params.get('agent');
-  if (agent === 'codex' || agent === 'dsh') safe.set('agent', agent);
+  if (isAgentId(agent)) safe.set('agent', agent);
   const session = params.get('session');
   if (session && /^[a-zA-Z0-9-]{1,128}$/.test(session)) safe.set('session', session);
   return `/chat${safe.size ? `?${safe}` : ''}`;

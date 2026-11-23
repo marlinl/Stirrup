@@ -3,7 +3,7 @@ import type { SettingsSummary } from '../../domain/models';
 /** Show authenticated storage metadata, keeping actual backend state distinct from Agent-owned context. */
 export function renderStorage(host: HTMLElement, summary: SettingsSummary): void {
   host.innerHTML = `<section class="settings-card glass"><h3>应用数据</h3><dl class="settings-facts" id="storage-facts"></dl>
-    <p class="muted">此处保存项目、页面对话、消息和草稿。Codex / DSH 自行管理模型上下文，能否继续会话取决于 Agent 的恢复能力。</p>
+    <p class="muted">此处保存项目、页面对话、消息和草稿。各 Agent 自行管理模型上下文，能否继续会话取决于 Agent 的恢复能力。</p>
     <p class="muted">迁移、备份及回退需在本机停止服务后操作；此页面只读。</p></section>`;
   const s = summary.storage;
   for (const [label, value] of [

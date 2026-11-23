@@ -1,4 +1,4 @@
-import { AGENTS, type AgentId } from '../acp/agents';
+import { isAgentId, type AgentId } from '../acp/agents';
 export interface Preferences {
   theme: 'system' | 'light' | 'dark';
   opaque: boolean;
@@ -27,7 +27,7 @@ export function loadPreferences(): Preferences {
   } catch {
     preferences = { ...defaults };
   }
-  if (!(preferences.agent in AGENTS)) preferences.agent = 'codex';
+  if (!isAgentId(preferences.agent)) preferences.agent = 'codex';
   return preferences;
 }
 

@@ -15,6 +15,12 @@ export function agentLaunch(id: AgentId, cwd: string, env: NodeJS.ProcessEnv = p
       command: [process.execPath, require.resolve('@agentclientprotocol/codex-acp')],
       env: { ...env, INITIAL_AGENT_MODE: 'read-only' },
     };
+  if (id === 'agy')
+    return {
+      command: [env.AGY_PATH?.trim() || 'agy', 'acp'],
+      env: { ...env },
+    };
+  if (id !== 'dsh') throw new Error('Unsupported ACP agent');
   return {
     command: [process.execPath, require.resolve('@deepseek-ai/dsh/lib/bin.js'), '--profile', 'acp'],
     env: {
