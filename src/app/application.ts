@@ -5,13 +5,8 @@ import { WorkspaceController } from '../domain/workspace';
 import { run, toast } from '../ui/dom';
 import { renderLogin, renderUnavailable } from '../ui/pages/login';
 import { createWorkspacePage } from '../ui/pages/workspace';
-import { appearance, loadPreferences } from './preferences';
-import {
-  readEnrollmentToken,
-  redirectToLocalhost,
-  writeLoginRoute,
-  workspaceDestination,
-} from './routes';
+import { appearance, loadPreferences, connectPreferences } from './preferences';
+import { writeLoginRoute, workspaceDestination } from './routes';
 
 /** Own browser startup, authenticated page transitions and teardown; rendering lives in ui/. */
 export class Application {
@@ -20,14 +15,13 @@ export class Application {
     if (this.workspace) this.showLogin({ configured: true, authenticated: false });
   });
   private destination = workspaceDestination();
-  private enrollmentToken = readEnrollmentToken();
+  private disconnectPreferences?: () => void;
   private generation = 0;
   private workspace?: WorkspaceController;
   private view?: ReturnType<typeof createWorkspacePage>;
 
   /** Install page lifecycle hooks and check authentication before mounting private workspace state. */
   async start(): Promise<void> {
-    if (redirectToLocalhost()) return;
     appearance(this.preferences);
     window.addEventListener('resize', () => this.view?.resize());
     matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () =>
@@ -62,12 +56,10 @@ export class Application {
     if (this.workspace) this.destination = workspaceDestination();
     this.disposeWorkspace();
     writeLoginRoute();
-    if (identity.configured) this.enrollmentToken = undefined;
-    renderLogin(identity, !!this.enrollmentToken, passkeySupported(), async () => {
-      const result = await usePasskey(this.api, this.enrollmentToken);
+    renderLogin(identity, !identity.configured, passkeySupported(), async () => {
+      const result = await usePasskey(this.api, !identity.configured);
       if (result.authenticated) await this.showWorkspace(result);
       else {
-        this.enrollmentToken = undefined;
         this.showLogin(result);
         toast('Passkey 已绑定，请使用它登录');
       }
@@ -83,6 +75,22 @@ export class Application {
       controller.dispose();
       return;
     }
+    try {
+      this.disconnectPreferences = await connectPreferences(
+        this.preferences,
+        this.api,
+        () => generation === this.generation,
+      );
+    } catch (error) {
+      controller.dispose();
+      throw error;
+    }
+    if (generation !== this.generation) {
+      this.disconnectPreferences();
+      controller.dispose();
+      return;
+    }
+    appearance(this.preferences);
     this.workspace = controller;
     history.replaceState({}, '', this.destination);
     this.view = createWorkspacePage(
@@ -109,6 +117,8 @@ export class Application {
   /** Release mounted view state and its independent ACP clients when leaving the authenticated page. */
   private disposeWorkspace(): void {
     this.generation++;
+    this.disconnectPreferences?.();
+    this.disconnectPreferences = undefined;
     this.view?.dispose();
     this.view = undefined;
     this.workspace?.dispose();

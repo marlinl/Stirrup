@@ -2,20 +2,6 @@ import { isAgentId } from '../acp/agents';
 import type { AgentId } from '../acp/agents';
 import type { Preferences } from './preferences';
 
-/** Read the terminal enrollment grant once; the login route removes it from the visible URL. */
-export function readEnrollmentToken(): string | undefined {
-  return new URLSearchParams(location.hash.slice(1)).get('enroll') ?? undefined;
-}
-
-/** Normalize local navigation to the fixed WebAuthn RP host, preserving path, query and enrollment fragment. */
-export function redirectToLocalhost(): boolean {
-  if (location.hostname !== '127.0.0.1') return false;
-  const url = new URL(location.href);
-  url.hostname = 'localhost';
-  location.replace(url.href);
-  return true;
-}
-
 /** Select the requested Agent and opaque conversation ID, falling back to saved UI preferences. */
 export function readChatRoute(preferences: Preferences): {
   agent: AgentId;

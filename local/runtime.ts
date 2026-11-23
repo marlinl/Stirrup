@@ -1,3 +1,5 @@
+import { PersonalSettingsStore } from './storage/personal-settings-store.ts';
+import { readSiteConfig, type SiteConfig } from './config/site.ts';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { AgentId } from '../src/acp/agents.ts';
 import type { Conversation } from '../src/domain/models.ts';
@@ -15,6 +17,8 @@ export interface BridgeGrant {
 
 /** Compose one local application's services and authorize ACP upgrades against those same services. */
 export class WebRuntime {
+  readonly settings: PersonalSettingsStore;
+  private readonly site: SiteConfig;
   private readonly passkeys: PasskeyAuth;
   private readonly sessions: SessionManager;
   private readonly workspace: WorkspaceStore;
@@ -23,10 +27,18 @@ export class WebRuntime {
 
   /** Assemble authentication and an exclusive SQLite store; legacy JSON requires explicit offline migration. */
   constructor(root: string, dataDir?: string) {
+    this.site = readSiteConfig(root);
     this.workspace = new WorkspaceStore(root, dataDir);
-    this.passkeys = new PasskeyAuth(root);
-    this.sessions = new SessionManager(root);
-    this.routes = new ApiRouter(root, this.passkeys, this.sessions, this.workspace);
+    this.settings = new PersonalSettingsStore(this.workspace.connection);
+    this.passkeys = new PasskeyAuth(this.settings, this.site);
+    this.sessions = new SessionManager(this.settings, this.site);
+    this.routes = new ApiRouter(
+      this.settings,
+      this.site,
+      this.passkeys,
+      this.sessions,
+      this.workspace,
+    );
   }
 
   /** Delegate HTTP handling to the explicit route module used by both development and preview. */
@@ -36,7 +48,7 @@ export class WebRuntime {
 
   /** Authorize a registered conversation's fixed Agent and project, preventing duplicate live connections. */
   authorize(request: IncomingMessage, agentId: AgentId): BridgeGrant | undefined {
-    if (!sameOrigin(request)) return;
+    if (!sameOrigin(request, this.site)) return;
     const login = this.sessions.login(request);
     if (!login) return;
     const id = new URL(request.url!, 'http://localhost').searchParams.get('conversation');

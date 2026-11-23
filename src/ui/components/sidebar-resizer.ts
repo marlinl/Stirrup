@@ -1,4 +1,4 @@
-import { el } from '../dom';
+import { el, toast } from '../dom';
 import { sidebarWidth } from '../layout';
 import { savePreferences, type Preferences } from '../../app/preferences';
 /** Open the mobile session drawer without changing desktop width preferences. */
@@ -12,7 +12,11 @@ export function createSidebarResizer(preferences: Preferences): () => void {
   function workspaceWidth(): number {
     const shell = el('workspace');
     const style = getComputedStyle(shell);
-    return shell.clientWidth - parseFloat(style.paddingLeft || '0') - parseFloat(style.paddingRight || '0');
+    return (
+      shell.clientWidth -
+      parseFloat(style.paddingLeft || '0') -
+      parseFloat(style.paddingRight || '0')
+    );
   }
 
   /** Apply sidebar proportions while retaining usable desktop chat width. */
@@ -22,7 +26,10 @@ export function createSidebarResizer(preferences: Preferences): () => void {
     const pixels = sidebarWidth(width, preferences.ratio);
     shell.style.setProperty('--sidebar-width', `${pixels}px`);
     el('resizer').setAttribute('aria-valuemin', '200');
-    el('resizer').setAttribute('aria-valuemax', String(Math.round(Math.min(width * 0.5, width - 524))));
+    el('resizer').setAttribute(
+      'aria-valuemax',
+      String(Math.round(Math.min(width * 0.5, width - 524))),
+    );
     el('resizer').setAttribute('aria-valuenow', String(Math.round(pixels)));
     if (window.innerWidth >= 1024) drawer(false);
   }
@@ -47,7 +54,8 @@ export function createSidebarResizer(preferences: Preferences): () => void {
     handle.addEventListener('pointermove', (event) => {
       if (!dragging) return;
       const width = workspaceWidth();
-      preferences.ratio = sidebarWidth(width, (startWidth + event.clientX - startX) / width) / width;
+      preferences.ratio =
+        sidebarWidth(width, (startWidth + event.clientX - startX) / width) / width;
       sizeSidebar();
     });
     /** Commit a finished drag, or restore the starting ratio on cancellation. */
@@ -56,7 +64,9 @@ export function createSidebarResizer(preferences: Preferences): () => void {
       dragging = false;
       document.body.classList.remove('resizing');
       if (cancelled) preferences.ratio = oldRatio;
-      savePreferences(preferences);
+      void savePreferences(preferences).then((saved) => {
+        if (!saved) toast('栏宽已生效，但个人设置保存失败，请刷新后重试');
+      });
       sizeSidebar();
     };
     handle.addEventListener('pointerup', () => finish(false));
@@ -64,7 +74,9 @@ export function createSidebarResizer(preferences: Preferences): () => void {
     handle.addEventListener('lostpointercapture', () => finish(false));
     handle.addEventListener('dblclick', () => {
       preferences.ratio = 0.2;
-      savePreferences(preferences);
+      void savePreferences(preferences).then((saved) => {
+        if (!saved) toast('栏宽已生效，但个人设置保存失败，请刷新后重试');
+      });
       sizeSidebar();
     });
     handle.addEventListener('keydown', (event) => {
@@ -83,7 +95,9 @@ export function createSidebarResizer(preferences: Preferences): () => void {
             ? width * 0.5
             : current + (event.key === 'ArrowLeft' ? -10 : 10);
       preferences.ratio = sidebarWidth(width, target / width) / width;
-      savePreferences(preferences);
+      void savePreferences(preferences).then((saved) => {
+        if (!saved) toast('栏宽已生效，但个人设置保存失败，请刷新后重试');
+      });
       sizeSidebar();
     });
   }

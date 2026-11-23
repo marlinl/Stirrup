@@ -44,9 +44,9 @@ Stirrup 是 npm / TypeScript 项目，本篇定义第一个 ACP 接入：在本�
 - `local/acp/bridge.ts`、`local/acp/launch.ts`：固定 Agent 入口、stdio 转发、启动配置和进程清理；`local/runtime.ts` 负责登录及项目授权。
 - `local/vite-plugin.ts`：装配本地 HTTP 路由与 ACP 转接。完整目录见 [004 · 代码分层](004_code_structure.md)。
 
-本地入口仅监听 `127.0.0.1`，校验 Host / Origin，不接受页面指定任意命令。工作目录绑定已登记的项目；WebSocket 升级还校验登录及会话归属。适配器 stderr 留在启动终端；stdout 仅用于 ACP。断开后停止适配器及其进程组。此入口只用于本机交互，不用于公网托管。
+入口的监听地址可配置，默认 `127.0.0.1`；地址与端口遵循 [003 的环境参数约束](003_web_app_design.md#app-环境参数与启动约束)。入口校验 Host / Origin，不接受页面指定任意命令。工作目录绑定已登记的项目；WebSocket 升级还校验登录及会话归属。适配器 stderr 留在启动终端；stdout 仅用于 ACP。断开后停止适配器及其进程组。
 
-进程组回收针对 macOS / Linux；Windows 下仅直接终止适配器，不提供完整子进程树回收保证。默认初始模式由转接层显式固定为只读；不继承环境中的 `INITIAL_AGENT_MODE`。不要使用 `--host 0.0.0.0` 对外开放此开发入口。
+进程组回收针对 macOS / Linux；Windows 下仅直接终止适配器，不提供完整子进程树回收保证。默认初始模式由转接层显式固定为只读；不继承环境中的 `INITIAL_AGENT_MODE`。允许通过监听参数绑定所有网卡。
 
 ## 运行与验证
 

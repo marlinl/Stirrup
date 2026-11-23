@@ -11,7 +11,7 @@ src/
 ├── main.ts                  # 唯一浏览器入口：加载样式、启动 Application
 ├── app/
 │   ├── application.ts       # 启动、登录/工作台切换、登出与销毁
-│   ├── routes.ts            # /login、/chat、/settings/*，URL 读写与 localhost 归一化
+│   ├── routes.ts            # /login、/chat、/settings/*，URL 读写
 │   └── preferences.ts       # 主题、栏宽、选择偏好的读取与保存
 ├── api/client.ts            # 同源 JSON 请求、错误及 401 通知
 ├── auth/passkey.ts          # 浏览器 WebAuthn 调用，不包含页面模板
@@ -38,17 +38,22 @@ src/
 
 local/
 ├── vite-plugin.ts           # Vite dev / preview 的装配入口
+├── config/
+│   ├── env.ts               # 根目录 .env 读取，不注入进程环境
+│   ├── startup.ts           # 监听配置与启动校验
+│   └── site.ts              # 外部站点 Origin 与 RP ID
 ├── runtime.ts               # 组装服务，校验 ACP 连接的会话和项目归属
 ├── http/
 │   ├── routes.ts            # HTTP 路由、鉴权边界、请求到业务操作的分发
 │   └── request.ts           # JSON body/response、Host/Origin、Cookie 解析
 ├── auth/
 │   ├── passkey-auth.ts      # WebAuthn 挑战、验签与首次绑定验证
-│   ├── passkey-store.ts     # .env 凭证读写及本机绑定授权
-│   └── sessions.ts          # 登录 Session、Cookie、.env 有效期、过期回收
+│   ├── passkey-store.ts     # 凭证类型、认证错误与身份摘要
+│   └── sessions.ts          # 登录 Session、Cookie、个人有效期、过期回收
 ├── storage/
 │   ├── database.ts          # SQLite 连接、PRAGMA、事务、目录锁与关闭
-│   ├── schema.sql           # v2 表结构
+│   ├── migrations/         # 连续编号 SQL；新建与升级共用
+│   ├── personal-settings-store.ts # 单用户凭证与个人配置
 │   ├── workspace-store.ts  # 项目与会话 SQL 映射、版本冲突、统计
 │   ├── records.ts          # 消息字段校验
 │   └── legacy-json.ts      # 离线 JSON 迁移、备份、核验与导出
@@ -56,7 +61,6 @@ local/
 │   ├── launch.ts            # 固定 Agent 启动命令与环境
 │   └── bridge.ts            # WebSocket ↔ stdio、子进程生命周期
 ├── cli/
-│   ├── setup-passkey.ts     # npm run passkey:setup
 │   └── migrate-storage.ts  # npm run storage:migrate / storage:export
 ├── errors.ts               # 可安全返回给页面的本地操作错误
 └── validation.ts           # 持久化字段的基本校验
@@ -78,8 +82,9 @@ ACP 字节转发位于 `local/acp/bridge.ts`，不处理登录或持久化。只
 
 | 要 review 的功能 | 首先查看 | 继续跟进 |
 | --- | --- | --- |
+| App 启动参数 | `local/config/startup.ts`、`vite.config.ts` | `.env.example`、`local/cli/setup-passkey.ts`、003 |
 | HTTP 接口与访问边界 | `local/http/routes.ts` | `http/request.ts`、`auth/sessions.ts` |
-| Passkey 与有效期 | `local/auth/passkey-auth.ts` | `passkey-store.ts`、`sessions.ts`、`.env.example` |
+| Passkey 与有效期 | `local/auth/passkey-auth.ts` | `local/storage/personal-settings-store.ts`、`sessions.ts`、`local/config/site.ts` |
 | 项目与对话保存 | `local/storage/workspace-store.ts` | `src/domain/models.ts`、`test/web.test.ts` |
 | 登录页面及页面切换 | `src/app/application.ts` | `app/routes.ts`、`ui/pages/login.ts` |
 | 三栏与交互 | `src/ui/pages/workspace.ts` | `workspace-shell.ts`、`ui/components/` |

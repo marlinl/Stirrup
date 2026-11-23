@@ -13,7 +13,8 @@ import { dirname, join } from 'node:path';
 import { HttpError } from '../errors.ts';
 
 export const DATABASE_NAME = 'stirrup.sqlite';
-export const SCHEMA_VERSION = 2;
+const MIGRATIONS = ['001_workspace.sql', '002_agents.sql', '003_personal_settings.sql'];
+export const SCHEMA_VERSION = MIGRATIONS.length;
 
 /** Exclusively own a data directory across the web runtime and offline tools; stale locks require operator inspection. */
 export function lockStorage(directory: string): () => void {
@@ -79,35 +80,51 @@ export class DatabaseConnection {
     }
   }
 
-  /** Create schema and caller-supplied initial records together, recording the source digest only after successful import. */
+  /** Build a fresh database with the same ordered migrations used for upgrades and atomically insert initial data. */
   initialize(insert: () => void, legacyDigest: string | null = null): void {
-    this.transaction(() => {
-      this.db.exec(readFileSync(new URL('./schema.sql', import.meta.url), 'utf8'));
-      insert();
-      this.db
-        .prepare('INSERT INTO schema_migrations VALUES (?, ?, ?)')
-        .run(1, Date.now(), legacyDigest);
-      this.db.prepare('INSERT INTO schema_migrations VALUES (?, ?, NULL)').run(2, Date.now());
-    });
+    this.applyMigrations(0, insert, legacyDigest);
   }
 
-  /** Expand the v1 Agent constraint atomically, preserving messages and the original import digest. */
+  /** Reject missing/future versions before applying the remaining SQL files as one atomic upgrade. */
   upgrade(): void {
-    const versions = this.db.prepare('SELECT version FROM schema_migrations ORDER BY version').all();
-    if (versions.length !== 1 || versions[0].version !== 1) return;
+    const versions = this.db
+      .prepare('SELECT version FROM schema_migrations ORDER BY version')
+      .all();
+    if (
+      !versions.length ||
+      versions.length > SCHEMA_VERSION ||
+      versions.some((row, index) => row.version !== index + 1)
+    )
+      throw new Error('数据库结构版本不受支持或迁移未完成');
+    if (versions.length === SCHEMA_VERSION) return;
     if (
       this.db.prepare('PRAGMA integrity_check').get()?.integrity_check !== 'ok' ||
       this.db.prepare('PRAGMA foreign_key_check').all().length
     )
       throw new Error('数据库完整性校验失败');
-    // SQLite table rebuild requires foreign keys disabled outside the transaction.
+    this.applyMigrations(versions.length);
+  }
+
+  /** Run pending migration SQL in order, allowing table rebuilds while checking foreign keys before commit. */
+  private applyMigrations(
+    from: number,
+    insert?: () => void,
+    legacyDigest: string | null = null,
+  ): void {
     this.db.exec('PRAGMA foreign_keys=OFF');
     try {
       this.transaction(() => {
-        this.db.exec(readFileSync(new URL('./002_agents.sql', import.meta.url), 'utf8'));
+        for (let index = from; index < MIGRATIONS.length; index++) {
+          this.db.exec(
+            readFileSync(new URL(`./migrations/${MIGRATIONS[index]}`, import.meta.url), 'utf8'),
+          );
+          this.db
+            .prepare('INSERT INTO schema_migrations VALUES (?, ?, ?)')
+            .run(index + 1, Date.now(), index === 0 ? legacyDigest : null);
+        }
+        insert?.();
         if (this.db.prepare('PRAGMA foreign_key_check').all().length)
           throw new Error('数据库迁移外键校验失败');
-        this.db.prepare('INSERT INTO schema_migrations VALUES (?, ?, NULL)').run(2, Date.now());
       });
     } finally {
       this.db.exec('PRAGMA foreign_keys=ON');
@@ -119,7 +136,10 @@ export class DatabaseConnection {
     const versions = this.db
       .prepare('SELECT version FROM schema_migrations ORDER BY version')
       .all();
-    if (versions.length !== SCHEMA_VERSION || versions.some((row, index) => row.version !== index + 1))
+    if (
+      versions.length !== SCHEMA_VERSION ||
+      versions.some((row, index) => row.version !== index + 1)
+    )
       throw new Error('数据库结构版本不受支持或迁移未完成');
     if (
       this.db.prepare('PRAGMA integrity_check').get()?.integrity_check !== 'ok' ||
@@ -127,6 +147,11 @@ export class DatabaseConnection {
     )
       throw new Error('数据库完整性校验失败');
     this.db.prepare('SELECT id, name, cwd, position FROM projects').all();
+    this.db
+      .prepare(
+        'SELECT user_id, user_name, passkey_rp_id, credential_json, session_ttl_seconds, preferences_json, preferences_revision, revision, updated_at FROM personal_settings LIMIT 0',
+      )
+      .all();
     this.db
       .prepare(
         'SELECT id, project_id, agent_id, title, provider_session_id, draft, updated_at, revision FROM conversations LIMIT 0',

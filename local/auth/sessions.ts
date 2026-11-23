@@ -1,7 +1,8 @@
 import { randomBytes } from 'node:crypto';
-import { parseEnv } from 'node:util';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { configIdentity, readPasskeyConfig } from './passkey-store.ts';
+import { configIdentity } from './passkey-store.ts';
+import type { PersonalSettingsStore } from '../storage/personal-settings-store.ts';
+import type { SiteConfig } from '../config/site.ts';
 import { HttpError } from '../errors.ts';
 import { cookie } from '../http/request.ts';
 
@@ -14,22 +15,15 @@ interface Login {
   timer: ReturnType<typeof setTimeout>;
 }
 
-/** Read the next login's absolute lifetime in seconds from .env, rejecting invalid or excessive values. */
-export function readSessionTtlSeconds(root: string): number {
-  const value = parseEnv(readPasskeyConfig(root).source).STIRRUP_SESSION_TTL_SECONDS ?? '43200';
-  const seconds = Number(value);
-  if (!/^\d+$/.test(value) || !Number.isSafeInteger(seconds) || seconds < 1 || seconds > 31_536_000) {
-    throw new HttpError(503, '.env 的 STIRRUP_SESSION_TTL_SECONDS 必须为 1–31536000 的整数秒');
-  }
-  return seconds;
-}
-
 /** Own authenticated logins, their cookies, expiration timers and attached ACP connections. */
 export class SessionManager {
   private readonly logins = new Map<string, Login>();
 
-  /** Bind the session configuration to the application's local .env directory. */
-  constructor(private readonly root: string) {}
+  /** Share the persisted account and external HTTPS cookie policy. */
+  constructor(
+    private readonly settings: PersonalSettingsStore,
+    private readonly site: SiteConfig,
+  ) {}
 
   /** Return a live login, expiring both its HTTP access and attached ACP connections together. */
   login(request: IncomingMessage): Login | undefined {
@@ -38,8 +32,8 @@ export class SessionManager {
     const login = this.logins.get(token);
     if (login) {
       try {
-        const config = readPasskeyConfig(this.root);
-        if (login.expires <= Date.now() || !config.credential || login.identity !== configIdentity(config)) {
+        const config = this.settings.readConfig();
+        if (login.expires <= Date.now() || !config || login.identity !== configIdentity(config)) {
           this.revoke(token);
           return;
         }
@@ -75,13 +69,16 @@ export class SessionManager {
     return timer;
   }
 
-  /** Mint a cookie and server session with the same .env lifetime, fixed for this login without sliding renewal. */
+  /** Mint a cookie and server session using the personal table's lifetime, fixed without sliding renewal. */
   signIn(
     request: IncomingMessage,
     response: ServerResponse,
     identity: { username: string; identity: string },
   ): void {
-    const seconds = readSessionTtlSeconds(this.root);
+    const config = this.settings.readConfig();
+    if (!config || configIdentity(config) !== identity.identity)
+      throw new HttpError(401, '登录身份已变化');
+    const seconds = config.sessionTtlSeconds;
     const previous = cookie(request, COOKIE);
     if (previous) this.revoke(previous);
     const token = randomBytes(32).toString('base64url');
@@ -90,7 +87,7 @@ export class SessionManager {
     this.logins.set(token, { ...identity, expires, connections: new Set(), timer });
     response.setHeader(
       'Set-Cookie',
-      `${COOKIE}=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${seconds}`,
+      `${COOKIE}=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${seconds}${this.site.secure ? '; Secure' : ''}`,
     );
   }
 
@@ -103,7 +100,10 @@ export class SessionManager {
   logout(request: IncomingMessage, response: ServerResponse): void {
     const token = cookie(request, COOKIE);
     if (token) this.revoke(token);
-    response.setHeader('Set-Cookie', `${COOKIE}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0`);
+    response.setHeader(
+      'Set-Cookie',
+      `${COOKIE}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0${this.site.secure ? '; Secure' : ''}`,
+    );
   }
 
   /** Release all login timers and owned sockets when the local runtime stops. */

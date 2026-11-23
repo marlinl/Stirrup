@@ -31,13 +31,16 @@ test('settings keeps streaming, permissions, draft and reading state; history/de
             return `
       import {createWorkspacePage} from '/src/ui/pages/workspace.ts';
       import {WorkspaceController} from '/src/domain/workspace.ts';
-      import {loadPreferences} from '/src/app/preferences.ts';
+      import {loadPreferences,connectPreferences} from '/src/app/preferences.ts';
+      void (async () => {
       const controller=new WorkspaceController(window.fixtureApi,()=>page?.scheduleRender());
       controller.projects=[{id:'p',name:'Project',cwd:'/project'}];
       controller.conversations=['codex','dsh'].map((agentId,i)=>({id:'c'+i,projectId:'p',agentId,title:agentId,draft:'draft '+agentId,messages:[],revision:0,updatedAt:1}));
       const preferences=loadPreferences(); preferences.selected={codex:'c0',dsh:'c1'};
+      await connectPreferences(preferences,window.fixtureApi);
       let page=createWorkspacePage(controller,preferences,{configured:true,authenticated:true},window.fixtureLogout,window.fixtureApi);
-      window.harness={controller,page};`;
+      window.harness={controller,page};
+      })();`;
         },
       },
     ],
@@ -61,6 +64,8 @@ test('settings keeps streaming, permissions, draft and reading state; history/de
   let fail = true;
   let requests = 0;
   let logouts = 0;
+  let failPreferences = false;
+  let preferenceSaves = 0;
   const summary = {
     account: {
       username: 'Local',
@@ -80,6 +85,13 @@ test('settings keeps streaming, permissions, draft and reading state; history/de
   Object.assign(w, {
     /** Return only fixture data; emulate metadata failure and revisioned persistence independently. */
     fixtureApi: async (path: string, _method?: string, input?: { revision: number }) => {
+      if (path === '/api/settings/preferences') {
+        if (_method === 'PUT') {
+          if (failPreferences) throw new w.Error('preferences unavailable');
+          return { revision: ++preferenceSaves };
+        }
+        return { values: { theme: 'dark', opaque: false, motion: false, ratio: 0.3 }, revision: 0 };
+      }
       if (path === '/api/settings') {
         requests++;
         if (fail) throw new w.Error('disk unavailable');
@@ -94,6 +106,7 @@ test('settings keeps streaming, permissions, draft and reading state; history/de
     },
   });
   w.eval(script.code);
+  await until(() => !!(w as unknown as { harness?: unknown }).harness);
   const { controller, page } = (
     w as unknown as {
       harness: {
@@ -186,12 +199,13 @@ test('settings keeps streaming, permissions, draft and reading state; history/de
   click('[data-section="appearance"]');
   w.document.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
   assert.equal(w.location.pathname, '/settings/appearance');
-  const proto = w.Storage.prototype;
-  proto.setItem = () => {
-    throw new Error('blocked');
-  };
+  assert.equal(doc.querySelector<HTMLSelectElement>('#theme')!.value, 'dark');
   click('#opaque');
-  assert.match(doc.getElementById('appearance-feedback')!.textContent!, /未能保存/);
+  await until(() => /已保存个人设置/.test(doc.getElementById('appearance-feedback')!.textContent!));
+  assert.equal(preferenceSaves, 1);
+  failPreferences = true;
+  click('#opaque');
+  await until(() => /未能保存/.test(doc.getElementById('appearance-feedback')!.textContent!));
   click('[data-section="account"]');
   await until(() => !!doc.getElementById('logout'));
   click('#logout');

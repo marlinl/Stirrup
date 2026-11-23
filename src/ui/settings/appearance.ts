@@ -1,6 +1,6 @@
 import { appearance, savePreferences, type Preferences } from '../../app/preferences';
 
-/** Render immediate browser-local appearance controls and report persistence failures without discarding other preferences. */
+/** Render immediate personal appearance controls and report persistence failures without discarding other preferences. */
 export function renderAppearance(
   host: HTMLElement,
   preferences: Preferences,
@@ -11,14 +11,14 @@ export function renderAppearance(
     <label class="setting-row" for="opaque">减少透明效果<input id="opaque" type="checkbox"></label>
     <label class="setting-row" for="motion">减少动态效果<input id="motion" type="checkbox"></label>
     <div class="setting-row"><span>默认栏宽</span><button id="reset-width" class="quiet-button">恢复为 20%</button></div>
-    <p class="muted">外观即时生效，仅保存到当前浏览器。系统减少动态效果偏好同样生效。</p>
+    <p class="muted">外观即时生效，保存到个人设置。系统减少动态效果偏好同样生效。</p>
     <p id="appearance-feedback" role="status"></p></section>`;
-  /** Apply all current preferences and announce whether they were durably saved to this browser. */
-  function commit(): void {
+  /** Apply all current preferences and announce whether they were durably saved to the personal settings table. */
+  async function commit(): Promise<void> {
     appearance(preferences);
-    host.querySelector('#appearance-feedback')!.textContent = savePreferences(preferences)
-      ? '已保存到此浏览器'
-      : '本次生效，但未能保存到此浏览器';
+    host.querySelector('#appearance-feedback')!.textContent = (await savePreferences(preferences))
+      ? '已保存个人设置'
+      : '本次生效，但未能保存个人设置，请刷新后重试';
   }
   const theme = host.querySelector<HTMLSelectElement>('#theme')!;
   theme.value = preferences.theme;

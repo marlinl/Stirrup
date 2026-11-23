@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import type { SiteConfig } from '../config/site.ts';
 import { HttpError } from '../errors.ts';
 
 const MAX_BODY = 8 * 1024 * 1024;
@@ -30,16 +31,28 @@ export function reply(response: ServerResponse, status: number, value: unknown):
   response.end(JSON.stringify(value));
 }
 
-/** Require a loopback Host matching the actual listening port, including on read-only endpoints. */
-export function localHost(request: IncomingMessage): boolean {
-  return [`127.0.0.1:${request.socket.localPort}`, `localhost:${request.socket.localPort}`].includes(
-    request.headers.host ?? '',
-  );
+/** Derive an exact loopback origin for the bound port, including IPv6 and HTTP's implicit port 80. */
+export function localOrigin(
+  host: string | undefined,
+  port: number | undefined,
+): string | undefined {
+  if (!host || !port) return;
+  const names = ['127.0.0.1', 'localhost', '[::1]'];
+  if (names.some((name) => host === `${name}:${port}` || (port === 80 && host === name)))
+    return new URL(`http://${host}`).origin;
 }
 
-/** Check exact origin for state-changing requests and ACP upgrades. */
-export function sameOrigin(request: IncomingMessage): boolean {
-  return localHost(request) && request.headers.origin === `http://${request.headers.host}`;
+/** Match the configured external authority; development defaults retain loopback aliases for page/API access. */
+export function validHost(request: IncomingMessage, site?: SiteConfig): boolean {
+  if (site?.origin) return request.headers.host === new URL(site.origin).host;
+  return !!localOrigin(request.headers.host, request.socket.localPort);
+}
+
+/** Check the canonical exact origin for state-changing requests and ACP upgrades. */
+export function sameOrigin(request: IncomingMessage, site?: SiteConfig): boolean {
+  if (!validHost(request, site)) return false;
+  const origin = site?.origin ?? localOrigin(request.headers.host, request.socket.localPort);
+  return !!origin && request.headers.origin === origin;
 }
 
 /** Extract a named opaque cookie without persisting or logging its value. */

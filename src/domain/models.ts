@@ -39,6 +39,8 @@ export interface SettingsSummary {
   account: {
     username: string;
     authMethod: 'passkey';
+    revision: number;
+    rpId: string;
     configuredSessionTtlSeconds: number;
     currentSessionExpiresAt: number;
   };

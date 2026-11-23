@@ -11,19 +11,11 @@ npm install
 npm run dev
 ```
 
-打开 **`http://localhost:5173/`**（端口被占用时以终端为准）。这是纯单用户 **Passkey 登录**，没有用户名输入、密码登录或网页注册账号。
+默认打开 **`http://localhost:5173/`**。在根目录 `.env` 中用 `STIRRUP_HOST`（默认 `127.0.0.1`，支持 IP / 主机名，如 `0.0.0.0`、`::`）和 `STIRRUP_PORT`（默认 `5173`）配置监听，修改后重启。dev 与 preview 共用这些参数，端口占用时启动失败，不自动递增。完整环境参数和优先级见 [003](docs/003_web_app_design.md#app-环境参数与启动约束)。这是纯单用户 **Passkey 登录**，没有用户名输入或密码登录。
 
-首次绑定，在本项目的另一个终端运行：
+需要通过 Nginx 访问时，在 `.env` 配置浏览器实际地址，例如 `STIRRUP_SITE_URL=https://chat.example.com`；内部 Node.js 仍可使用 HTTP。Nginx 保留外部 Host 与 Origin，并转发 ACP WebSocket，详见 [003 的站点身份约定](docs/003_web_app_design.md#站点身份与-nginx)。
 
-```sh
-npm run passkey:setup
-# 如果 dev 使用了其他端口，例如 5174：
-# npm run passkey:setup -- 5174
-```
-
-打开命令生成的短时绑定链接，点击「创建 Passkey」，由本人按系统提示完成 Touch ID、设备 PIN 或其他认证器验证。绑定后再点击「使用 Passkey 登录」。绑定链接仅在 10 分钟内有效，使用后失效；它本身不能登录。已绑定时，该命令拒绝覆盖现有 Passkey。
-
-访问 `127.0.0.1` 会自动转到同端口的 `localhost`；Passkey 的 RP ID 固定为 `localhost`，请始终使用这个主机名。
+首次访问时，个人设置表没有记录，登录页直接显示「创建 Passkey」。完成系统认证器验证后初始化个人记录，再使用 Passkey 登录。已有记录时不开放注册。旧 `.env` 账号、公钥与浏览器外观设置不导入；私钥始终留在认证器中。
 
 登录后进入三栏工作台：
 
@@ -33,7 +25,7 @@ npm run passkey:setup
 
 切换 Agent 或对话不会断开后台连接，各会话独立保存消息和草稿。刷新后可以查看历史；点击“继续会话”会按代理公布的 load / resume 能力尝试恢复。不支持恢复时请在同一项目新建对话，不会自动重发旧消息。
 
-设置沿用同一三栏工作台：左侧图标导航、中间设置分类、右侧设置内容。支持外观、Agent 状态、只读账号/登录有效期和存储信息，以及内联确认退出。切换设置保留后台输出与审批；退出会关闭当前登录下的代理连接。具体操作见 006。Codex / DSH 使用官方来源图标，来源见 [图标说明](src/ui/assets/README.md)。
+设置沿用同一三栏工作台：左侧图标导航、中间设置分类、右侧设置内容。支持外观、Agent 状态、个人名称/登录有效期和存储信息，以及内联确认退出。切换设置保留后台输出与审批；退出会关闭当前登录下的代理连接。具体操作见 006。Codex / DSH 使用官方来源图标，来源见 [图标说明](src/ui/assets/README.md)。
 
 ## 从旧 JSON 版本升级
 
@@ -48,7 +40,7 @@ npm run dev
 
 如需回退格式，在停止服务后运行 `npm run storage:export`；它生成经过验证的 `backups/export-*/`，不会覆盖正在使用的数据或凭据。恢复旧 JSON 代码版本时只替换项目索引和对话文件，具体步骤见 005。
 
-已有 SQLite v1 数据库会在持有目录锁时自动升级至 v2，保留原会话和消息。升级前应停止服务并备份 `.local/web/`；旧版代码不能直接打开升级后的数据库，恢复方法见 005。
+已有 SQLite v1/v2 数据库会在持有目录锁时自动执行 migration 升级至 v3，保留原会话和消息。升级前应停止服务并备份 `.local/web/`；旧版代码不能直接打开升级后的数据库，恢复方法见 005。
 
 ## Agent 凭据
 
@@ -61,22 +53,19 @@ Stirrup 登录和 Agent 模型认证是两个独立步骤。不要将模型密�
 
 ## 本地数据与验证
 
-根目录 **`.env`** 是唯一的本地登录配置来源（模板见 [.env.example](.env.example)）：
+根目录 **`.env`** 只管理 App 启动配置（模板见 [.env.example](.env.example)）：
 
 | 变量 | 内容 |
 | --- | --- |
-| `STIRRUP_PASSKEY_USER_ID` | 自动生成的单用户随机标识 |
-| `STIRRUP_PASSKEY_USER_NAME` | 认证器中的显示名称，默认为 `Stirrup`，页面无需输入 |
-| `STIRRUP_PASSKEY_CREDENTIAL` | 验证绑定后自动写入的单行 JSON，含凭证 ID、COSE 公钥的 base64url、签名计数器及传输方式 |
-| `STIRRUP_SESSION_TTL_SECONDS` | 登录有效期，单位秒；默认 `43200`（12 小时），范围 1–31536000 |
+| `STIRRUP_HOST` | dev/preview 监听地址，默认 `127.0.0.1`，支持 IP / 主机名及通配监听 |
+| `STIRRUP_PORT` | 监听端口，默认 `5173`，范围 1–65535；占用时启动失败 |
+| `STIRRUP_SITE_URL` | 浏览器访问的外部站点来源，例如 `https://chat.example.com`；省略时用 `http://localhost:<实际端口>` |
 
-私钥留在认证器中，不写入 `.env`。认证代码只从本地 `.env` 读取以上配置，不接受请求中指定用户或 `process.env` 覆盖；写入保留其他环境配置，文件权限为 0600。公钥登记成功前不会创建登录会话。后续登录会更新签名计数器，因此 `.env` 需要可写。
+**`.local/web/stirrup.sqlite`** 保存项目、对话、消息、草稿，以及独立的 **`personal_settings`** 表。个人表保存 Passkey 用户和公钥凭证、RP ID、显示名称、登录有效期与外观配置；默认有效期 12 小时。设置页保存名称和有效期，下一次登录使用新有效期，已有会话不延长。浏览器只缓存最近 Agent / 会话选择。
 
-项目、对话、消息和草稿保存在 **`.local/web/stirrup.sqlite`**，消息可变字段保存为 JSON 文本。数据库连接与事务位于 `local/storage/database.ts`，业务读写位于 `local/storage/workspace-store.ts`；表结构、迁移与回退见 005。`.local/web/` 还保留短时绑定授权的散列；`.local/dsh/` 保存 DSH 数据。`.env` 和 `.local/` 均被 Git 忽略并禁止通过 Vite 读取。旧 `.local/web/account.json` 不再参与认证。登录继续使用 HttpOnly Cookie；服务重启后需重新验证 Passkey，同一数据目录仅运行一个 Web 实例。
+SQL 结构唯一维护在 [local/storage/migrations/](local/storage/migrations/)，按编号执行，设计与恢复契约见 [005](docs/005_sqlite_storage_design.md)。`.env` 与 `.local/` 均被 Git 忽略并禁止通过 Web 静态路径读取。登录仍使用服务端内存 Session 与 HttpOnly Cookie，服务重启后重新登录。
 
-有效期在每次登录成功时从 `.env` 读取，同时用于 Cookie 和服务端会话。修改后无需重启，对下一次登录生效；已登录会话保留原到期时间，不随访问续期。未配置时使用 12 小时，空值或非法值会拒绝创建登录会话。
-
-若 Passkey 丢失，需由有本机文件权限的本人备份 `.env`，清空 `STIRRUP_PASSKEY_CREDENTIAL` 后重新运行绑定命令。没有密码后门或远程找回入口。
+旧 `.env` 账号和有效期项、旧绑定授权文件不再读取，也不会被自动删除。丢失 Passkey 没有密码恢复入口；数据库备份包含个人凭证和配置，聊天 JSON 导出不能代替完整备份。
 
 ```sh
 npm run check
@@ -85,7 +74,7 @@ npm run build
 npm run preview
 ```
 
-`preview` 提供同样的登录和本地 ACP 转接。单独部署 `dist/` 静态文件无法连接本地代理。本项目仅监听回环地址，不用于公网托管。
+`preview` 提供同样的登录和本地 ACP 转接。单独部署 `dist/` 静态文件无法连接本地代理。监听地址通过 `.env` 配置。
 
 `npm run smoke:dsh` 检查真实 DSH 握手、建会话和配置；提供模型凭据后，`npm run smoke:dsh -- --prompt` 可追加一次短回复测试。
 

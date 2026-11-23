@@ -73,12 +73,12 @@
 
 | 操作 | 生效与保存 | 失败反馈 |
 | --- | --- | --- |
-| 跟随系统 / 浅色 / 深色 | 选择后立即应用到整个工作台，保存 `theme`；跟随系统继续监听系统变化 | 浏览器持久化失败时提示“本次生效，但未能保存到此浏览器” |
+| 跟随系统 / 浅色 / 深色 | 选择后立即应用到整个工作台，保存 `theme`；跟随系统继续监听系统变化 | 数据库保存失败时提示“本次生效，但未能保存个人设置，请刷新后重试” |
 | 减少透明效果 | 立即切换更实的材料底色，保存 `opaque` | 同上 |
 | 减少动态效果 | 立即减少过渡，保存 `motion`；系统减少动态偏好仍优先得到满足 | 同上 |
 | 恢复默认栏宽 | 将共享比例设为 0.2，重新按窗口限宽计算，保存 `ratio` | 提示成功或仅临时生效，不清除主题和会话选择 |
 
-这些是即时生效的偏好，不设置一个没有实际意义的总“保存”按钮。每项只改变自身字段，保留 `agent`、`selected` 等其他偏好；切换分类或离开设置不要求“保存整页”。不在 `localStorage` 中保存登录令牌、消息或模型密钥。
+这些偏好保存到 SQLite `personal_settings.preferences_json`，登录后加载；保存按队列串行发送并携带独立版本号，冲突返回 409，不自动覆盖其他页面。它们即时生效，不设置一个没有实际意义的总“保存”按钮。每项只改变自身字段，保留 `agent`、`selected` 等其他偏好；切换分类或离开设置不要求“保存整页”。不在 `localStorage` 中保存登录令牌、消息或模型密钥。
 
 ### Agent：连接配置与状态
 
@@ -119,9 +119,9 @@
 
 ### 账号与安全
 
-显示固定单用户的名称、认证方式“Passkey”、当前登录的到期时间，以及 `.env` 配置的后续登录有效期。两种时间明确区分：修改 `.env` 不会延长已经建立的登录 Session。
+显示单用户名称、认证方式“Passkey”、当前登录的到期时间，以及个人表配置的后续登录有效期。两种时间明确区分：修改配置不会延长已建立的登录 Session。
 
-名称、Passkey 与 `STIRRUP_SESSION_TTL_SECONDS` 均只读，配置来源仍是 `.env`。可说明去本机修改配置及重新登录生效，不增加网页密码、用户名修改或公钥替换表单，不返回原始凭证、公钥 JSON、Cookie 或绑定授权。
+名称和后续登录有效期可编辑，通过「保存个人设置」写入独立个人表。名称为 1–64 字符；有效期为 1–31536000 的整数秒，默认 43200。保存携带账号版本，冲突、校验或写入失败保留输入并显示错误；成功后更新展示，但不改变本次到期时间。Passkey 不提供公钥替换表单，不返回原始凭证、公钥 JSON、Cookie 或挑战。
 
 “退出登录”的操作顺序：
 
@@ -137,9 +137,9 @@
 
 | 展示项 | 约定 |
 | --- | --- |
-| 当前存储方式 | 后端确认的 `JSON 文件` 或 `SQLite`，不能因为文档已完成就显示“已迁移” |
+| 当前存储方式 | 后端确认的 `SQLite` |
 | 应用数据位置 | 已登录用户可见的本地应用路径；只读，不允许从页面切换到任意数据库文件 |
-| 结构版本 | 数据库实际 schema 版本号（如 v1），不是 SQLite 引擎版本；JSON 后端显示“不适用” |
+| 结构版本 | 数据库实际 schema 版本号（当前 v3），不是 SQLite 引擎版本 |
 | 项目/对话/消息数量 | 来自已授权的实际存储读取，不通过导出全部正文来统计 |
 | Agent 上下文 | 提示由 Codex / DSH / Antigravity 自己管理；没有恢复能力时历史仍可阅读 |
 
@@ -147,7 +147,7 @@
 
 ## 数据来源与最小接口
 
-外观直接复用 `app/preferences.ts`；Agent 运行状态来自已存在的 `WorkspaceController`，连接配置由后端持久化；退出复用 `POST /api/logout`。为 `.env` 有效期、当前 Session 到期时间和存储元信息，提供只读 `GET /api/settings`。
+外观直接复用 `app/preferences.ts`；Agent 运行状态来自已存在的 `WorkspaceController`，连接配置由后端持久化；退出复用 `POST /api/logout`。个人配置与当前 Session 到期时间、存储元信息通过只读 `GET /api/settings` 提供。
 
 返回只含设置页实际展示的安全投影：
 
@@ -156,13 +156,15 @@
   "account": {
     "username": "Stirrup",
     "authMethod": "passkey",
+    "revision": 0,
+    "rpId": "chat.example.com",
     "configuredSessionTtlSeconds": 43200,
     "currentSessionExpiresAt": 1795392000000
   },
   "storage": {
     "backend": "sqlite",
     "location": ".local/web/stirrup.sqlite",
-    "schemaVersion": 1,
+    "schemaVersion": 3,
     "projectCount": 2,
     "conversationCount": 8,
     "messageCount": 120
@@ -170,9 +172,15 @@
 }
 ```
 
-此示例说明响应形状，数值不代表当前实例。JSON 后端的 `location` 为 `.local/web/`、`schemaVersion` 为 null。接口必须鉴权、同源、`Cache-Control: no-store`；未登录返回 401。配置或存储读取失败返回明确错误，不返回占位成功数据。禁止把整个 `.env`、进程环境、登录对象或数据库内容直接序列化给页面。
+此示例说明响应形状，计数与时间不代表当前实例。接口必须鉴权、同源、`Cache-Control: no-store`；未登录返回 401。配置或存储读取失败返回明确错误，不返回占位成功数据。禁止把整个 `.env`、进程环境、登录对象或数据库内容直接序列化给页面。
 
-进入相关分类时加载，支持明确“重试”，不在每个 ACP 文本片段到达时重查数据库。不提供写登录 `.env` 或任意修改数据库的接口；Agent 配置通过以下专用接口保存。
+进入相关分类时加载，支持明确“重试”，不在每个 ACP 文本片段到达时重查数据库。不提供写 `.env` 或任意修改数据库的接口。个人配置使用以下专用接口，均须鉴权、同源校验与 no-store：
+
+- `GET /api/settings/preferences` 返回显示偏好 `values` 和独立 `revision`。
+- `PUT /api/settings/preferences` 仅接受 `theme`、`opaque`、`motion`、`ratio` 与版本；不允许透传凭证字段。
+- `PUT /api/settings/account` 接受 `username`、`sessionTtlSeconds` 与账号 `revision`；保存名称和后续登录有效期。
+
+Agent 配置通过以下专用接口保存。
 
 ### Agent 配置接口
 

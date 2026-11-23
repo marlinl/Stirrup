@@ -101,6 +101,14 @@ test(
       const path = String(input);
       let data: unknown;
       if (path === '/api/auth') data = { configured: true, authenticated };
+      else if (path === '/api/settings/preferences')
+        data =
+          init?.method === 'PUT'
+            ? { revision: 1 }
+            : {
+                values: { theme: 'system', opaque: false, motion: false, ratio: 0.2 },
+                revision: 0,
+              };
       else if (path === '/api/passkey/login/options')
         data = {
           challenge: 'AQID',
@@ -227,7 +235,7 @@ test(
 );
 
 test(
-  'first-key binding uses the terminal fragment, removes it from the URL and still requires a Passkey login',
+  'empty-account page directly initializes Passkey and then offers normal login',
   { timeout: 15000 },
   async (t) => {
     const output = await build({
@@ -239,7 +247,7 @@ test(
     const script = output.output.find((item) => item.type === 'chunk' && item.isEntry);
     assert.ok(script?.type === 'chunk');
     const dom = new JSDOM('<div id="app"></div><div id="toast" hidden></div>', {
-      url: 'http://localhost:5173/login#enroll=test-only-grant',
+      url: 'http://localhost:5173/login',
       runScripts: 'outside-only',
       pretendToBeVisual: true,
     });
@@ -276,7 +284,7 @@ test(
       let data;
       if (path === '/api/auth') data = { configured: false, authenticated: false };
       else if (path === '/api/passkey/register/options') {
-        assert.equal(JSON.parse(init!.body!).token, 'test-only-grant');
+        assert.deepEqual(JSON.parse(init!.body!), {});
         data = {
           challenge: 'AQID',
           rp: { id: 'localhost', name: 'Stirrup' },

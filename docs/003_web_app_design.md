@@ -6,7 +6,7 @@ Stirrup 的 Web 界面分为**登录页**与**登录后的工作台**两个层�
 
 设置布局与操作由 [006 · 设置页面](006_settings_page_design.md) 定义，数据持久化由 [005 · SQLite 存储](005_sqlite_storage_design.md) 定义，模块边界见 [004 · 代码分层](004_code_structure.md)，消息与输入区的详细产品定义见 [007 · 对话消息与输入区](007_conversation_product_design.md)。
 
-[001 · Codex ACP 对接](001_codex_acp.md) 与 [002 · DSH ACP 对接](002_dsh_acp.md) 分别负责协议与能力边界。本篇负责页面、启动和交互关系；新页面不得绕过已有协议能力检查。范围仅覆盖本地 Web 产品所需的启动与交互，不扩展到公网部署、多用户平台或整体服务架构。
+[001 · Codex ACP 对接](001_codex_acp.md) 与 [002 · DSH ACP 对接](002_dsh_acp.md) 分别负责协议与能力边界。本篇负责页面、启动和交互关系；新页面不得绕过已有协议能力检查。范围覆盖 Web 产品所需的启动与交互，不扩展到多用户平台或整体服务架构。
 
 ## 页面层级、路由与启动流程
 
@@ -29,9 +29,44 @@ npm run dev
 
 `npm run build` 构建前端，`npm run preview` 用于带本地 ACP 转接的构建预览。单独托管 `dist/` 无法操作本地代理。以上命令均使用本篇的新页面与本地登录入口。同一数据目录只运行一个 Web 实例。
 
+### App 环境参数与启动约束
+
+`local/config/startup.ts` 与 `local/config/site.ts` 分别读取项目根目录 `.env` 的监听配置和站点配置；`vite.config.ts` 将其应用到 `npm run dev` 和 `npm run preview`。首次配置可参考 `.env.example`，已有 `.env` 只追加或修改所需启动参数，不覆盖无关配置。
+
+| `.env` 参数 | 默认值 / 来源 | 约束与生效时机 |
+| --- | --- | --- |
+| `STIRRUP_HOST` | `127.0.0.1` | Web 监听地址，支持 IP 地址或主机名，包括 `0.0.0.0` / `::` 通配监听；启动时读取，修改后重启 |
+| `STIRRUP_PORT` | `5173` | Web 监听端口，1–65535 的十进制整数；dev 与 preview 使用同一值，启动时读取，修改后重启 |
+| `STIRRUP_SITE_URL` | 缺省为 `http://localhost:<实际监听端口>` | 浏览器访问的完整站点来源；HTTPS 域名，可含非默认外部端口；仅开发环境允许 `http://localhost`。不含路径、查询、fragment 或用户信息，不接受 IP 作为 RP ID。启动时读取，修改后重启 |
+
+Passkey 用户、公钥凭证、个人偏好和登录有效期由 SQLite `personal_settings` 保存，见 005。旧 `.env` 账号、公钥和有效期项不读取、不导入；没有个人记录时进入首次初始化。
+
+典型监听配置：
+
+```dotenv
+STIRRUP_HOST=127.0.0.1
+STIRRUP_PORT=5173
+STIRRUP_SITE_URL=https://chat.example.com
+```
+
+启动行为必须满足：
+
+1. 监听参数采用「显式 `--host` / `--port` > 根目录 `.env` > 内置默认值」的优先级。根目录 `.env` 本身必须有效；命令行覆盖值经过同样校验。Shell 中同名 `STIRRUP_*`、`.env.local`、`.env.development`、`.env.production` 不覆盖本表配置。缺少 `.env` 可用默认监听配置启动并进入首次绑定流程；显式空地址/空端口、非法值或文件不可读取时直接退出，不静默回退。
+2. dev 与 preview 均强制 `strictPort`：端口被占用立即失败，不自动递增、不选择随机端口。绑定失败必须释放已打开的数据库及目录锁。权限不足或系统不支持所选地址时使用实际监听错误，不伪装为启动成功。
+3. 显式 `STIRRUP_SITE_URL` 不随内部监听地址、端口或 CLI 覆盖而改变；缺省开发地址随实际监听端口计算。
+4. `STIRRUP_HOST` 控制绑定地址。HTTP 与 ACP 保留登录鉴权与严格同源校验。
+5. 不限制监听地址为回环地址。允许 `0.0.0.0`、`::`、网卡 IP 或主机名，以及 Vite 的无值 `--host` 通配监听；地址不包含协议、端口、路径或空白，主机解析和能否绑定由操作系统决定。
+6. App 配置仅在服务端读取，不设置 `VITE_` 前缀、不注入前端 bundle、不通过设置接口回显原始 `.env`。未配置 Passkey 不阻止 HTTP 启动，但受保护的工作台接口仍不可访问。监听地址、端口与站点地址不热更新；个人设置在数据库中保存，按登录章节的读取时机生效。
+
+Agent 运行环境另行区分：`CODEX_API_KEY` / `OPENAI_API_KEY`、`DEEPSEEK_API_KEY`、`DSH_HOME`、`AGY_PATH` 由启动进程的环境继承给对应 Agent，或由 Agent 自己读取其本地配置；Stirrup 不自动把根目录 `.env` 的任意变量写入进程环境。它们不属于上述 App 监听/登录参数，也不应使用 `VITE_*` 暴露到浏览器。固定 Agent 命令与环境策略见 001、002、008。
+
+启动验收应覆盖：缺省参数、dev/preview 同端口、合法自定义地址和端口、非法值快速失败、端口占用不递增且释放目录锁、命令行覆盖与通配监听、外部站点地址独立于内部端口，以及 HTTP/ACP 的 Host 和 Origin 校验。
+
+### 启动流程
+
 启动顺序：
 
-1. 启动本地 Web 入口，读取本地 `.env` Passkey 及项目配置；保留仅监听 `127.0.0.1` 的边界。
+1. 启动本地 Web 入口，先读取并校验项目根目录 `.env` 的监听配置，再创建本地运行时并绑定指定地址和端口。
 2. 浏览器检查 Stirrup 登录状态；检查期间显示轻量加载状态，不闪现历史对话。
 3. 未登录进入 `/login`；已登录默认进入 `/chat`，加载项目、会话索引和界面偏好。已登录直接访问设置路由时保留目标分类，未登录时由登录流程校验并恢复合法的工作台目标路由。
 4. 恢复上次选中的 Agent、项目及会话；记录不存在时退回相应空状态。
@@ -39,27 +74,27 @@ npm run dev
 
 Stirrup 登录与 Agent 模型认证分开：前者决定能否访问工作台，后者由 Codex / DSH / Antigravity 的实际认证能力和本地凭据决定。登录 Stirrup 不代表任意模型可用。
 
-### 登录页
+### 站点身份与 Nginx
 
-登录页使用居中的玻璃面板，只提供「使用 Passkey 登录」，不再提供账号输入、密码输入或创建密码账号。单用户显示名称默认为 `Stirrup`，身份从本地 `.env` 读取。
+`STIRRUP_SITE_URL=https://chat.example.com:8443` 对应 RP ID `chat.example.com`、预期 Origin `https://chat.example.com:8443`。RP ID 不含协议或端口，Origin 不含路径。网站身份来自服务端配置，不从客户端提交的域名或转发头推导。[WebAuthn RP 规则](https://developer.mozilla.org/en-US/docs/Web/API/PublicKeyCredentialCreationOptions#rp)
 
-首次绑定由有本机文件权限的使用者运行 `npm run passkey:setup` 开启。命令在 `.env` 中初始化随机用户 ID 和显示名称，在 `.local/web/passkey-enrollment.json` 保存一次性授权的 SHA-256 散列及十分钟有效期，在终端输出带 fragment 的绑定链接。浏览器移除地址栏中的 fragment，仅将授权保存在当前页面内存中；重新加载绑定页需重新打开链接。绑定入口不会自行登录，也不能替换已登记的 Passkey。
+浏览器通过 HTTPS 访问 Nginx，Nginx 可通过 HTTP 转发给 Node.js。Nginx 必须保留外部 `Host`（含非默认端口，如 `proxy_set_header Host $http_host`）与浏览器 `Origin`，为 ACP 转发 WebSocket Upgrade；Node.js 仍按外部站点校验。`X-Forwarded-Host` / `X-Forwarded-Proto` 不覆盖配置，也不能用于放行其他站点。dev/preview 的允许主机包含配置域名。
 
-用户点击「创建 Passkey」并完成系统认证器提示后，服务端验证注册响应，再将凭证写入 `.env`。用户随后通过正常 Passkey 签名验证进入工作台。创建或使用真实 Passkey 的系统确认必须由本人完成。
+HTTPS 站点的登录 Cookie 与 WebAuthn 挑战 Cookie 均带 `Secure`、`HttpOnly`、`SameSite=Strict`。缺省开发入口为 `localhost`；浏览器不会被强制导航到其他主机。局域网可通过受信任证书的 HTTPS 域名使用 Passkey；普通局域网 HTTP 不满足浏览器安全上下文要求。更换域名不会把原 RP 的凭证自动转成新站点凭证，也不能自动清空个人记录以重新开放初始化。
 
-| `.env` 项 | 存储内容 |
-| --- | --- |
-| `STIRRUP_PASSKEY_USER_ID` | 随机 32 字节的 base64url 用户 ID |
-| `STIRRUP_PASSKEY_USER_NAME` | 本地单用户的认证器显示名称，默认 `Stirrup` |
-| `STIRRUP_PASSKEY_CREDENTIAL` | 单行 JSON：`id`、COSE 公钥 `publicKey` 的 base64url、`counter`、可选 `transports` |
+### 登录页与首次初始化
 
-公钥和凭证 ID 均由已验证的注册结果生成，不能只提供一个 PEM 公钥代替完整 WebAuthn 凭证。私钥不离开认证器。上述配置不从浏览器接收、不从 `process.env` 覆盖；保留 `.env` 内其他变量，以 0600 权限原子更新。读取 `.env` 变更即时生效，公钥/用户变更使旧登录在下次鉴权时失效并关闭其 ACP 连接；计数器更新不撤销正常会话。旧 `account.json` 文件不再读取，旧密码接口返回 410。
+登录页使用居中的玻璃面板，只有 Passkey 操作，没有用户名输入或密码兜底。`GET /api/auth` 根据 `personal_settings` 是否存在记录返回 `configured`；查库失败返回错误，不将错误当作“首次使用”。
 
-认证使用 `@simplewebauthn/server` / `@simplewebauthn/browser`。RP ID 固定 `localhost`，预期 Origin 严格匹配当前本地服务端口；`127.0.0.1` 页面自动导航到同端口的 `localhost`。注册要求 resident key 和 user verification；登录强制检查用户验证、签名、RP、Origin、挑战和已登记的凭证 ID。挑战绑定独立 HttpOnly Cookie，五分钟过期，提交验证即消费；注册还会在异步验签之后再次检查终端授权与配置版本，防止并发覆盖。
+- **没有个人记录**：显示「创建 Passkey」，无需终端命令或绑定链接。服务端生成随机用户 ID、默认显示名称 `Stirrup` 及五分钟挑战，均先保留在内存。本人完成系统认证器验证后，服务端验签，在事务中再次检查表为空，然后插入唯一个人记录。公钥、凭证 ID、RP ID、签名计数器、传输方式和默认个人配置一同保存；私钥始终留在认证器中。
+- **已经初始化**：只显示「使用 Passkey 登录」，拒绝再次注册。初始化成功后转为普通登录，由一次认证断言建立登录会话。注册与登录都要求 user verification；取消、过期或验证失败允许重试，不产生半初始化记录。
+- 两个浏览器同时初始化时只有一个可以成功提交；失败者不能覆盖已登记的凭证。首次初始化入口面向可访问该站点的浏览器，完成后关闭注册。
 
-提交中禁用重复提交；用户取消、超时或验证失败时留在登录页并允许重试。没有用户名/密码兜底。登录有效期从 `.env` 的 `STIRRUP_SESSION_TTL_SECONDS` 读取，单位秒，默认 `43200`（12 小时），允许 1–31536000 的整数。Cookie Max-Age、服务端绝对到期时间及连接回收定时器使用同一值；长有效期采用分段定时，避免 Node 定时器溢出。每次登录时读取，修改只影响后续登录，不重算已有会话，也不滑动续期；非法配置拒绝创建登录会话。服务重启后需重新登录。协议依据见 [SimpleWebAuthn 服务端文档](https://simplewebauthn.dev/docs/packages/server)及[浏览器文档](https://simplewebauthn.dev/docs/packages/browser)。
+认证使用 `@simplewebauthn/server` / `@simplewebauthn/browser`，校验签名、用户验证、RP ID、Origin、挑战和已登记凭证 ID。挑战绑定独立 HttpOnly Cookie，五分钟过期，验证前即消费；异步验证后再次检查有效期与持久化版本。登录更新计数器时使用乐观并发校验，禁止覆盖更新后的记录。旧 `.env` 凭证、密码账号和绑定授权文件均不参与认证，不自动导入。
 
-登录必须保护本地数据接口与 ACP WebSocket 升级入口，不能只通过前端路由或 `localStorage` 布尔值控制。采用服务端会话与 HttpOnly、SameSite Cookie；继续校验同源请求，登出或会话失效后拒绝新请求并关闭对应的 ACP 连接。生产 HTTPS 下的 Cookie 与部署配置不在本篇展开。
+登录有效期来自 `personal_settings.session_ttl_seconds`，默认 `43200` 秒（12 小时），范围 1–31536000 的整数。设置页可修改名称与有效期；有效期仅影响下次登录，不重算已有会话，不滑动续期。Cookie Max-Age、服务端绝对到期时间和 ACP 回收使用同一值；长有效期采用分段计时。修改显示名称不改变账号身份或使已登录会话失效，替换公钥或删除账号会在下次鉴权时撤销其登录与连接。
+
+登录必须保护数据接口和 ACP WebSocket 升级入口，不能只靠前端路由。Session 与挑战保存在服务端内存，重启后重新登录；登出或到期会关闭对应 ACP 连接。协议依据见 [SimpleWebAuthn 服务端文档](https://simplewebauthn.dev/docs/packages/server)及[浏览器文档](https://simplewebauthn.dev/docs/packages/browser)。
 
 ## 主对话页：三栏布局
 
@@ -167,7 +202,7 @@ Stirrup 登录与 Agent 模型认证分开：前者决定能否访问工作台�
 
 每条应用会话记录绑定一个项目和一个 Agent，并保存代理返回的 sessionId（建立前可以为空）。应用内记录 ID 用于稳定的列表与页面选择；ACP sessionId 由代理管理；JSON-RPC request ID 仍由 SDK 管理。事件通过所属连接与 sessionId 路由，不能使用当前选中项来推断归属。权限响应只能回到发起请求的连接。
 
-项目索引、会话展示记录等本地状态当前以 SQLite 存入本项目 `.local/web/`，与 `.local/dsh/` 分开并由 `.gitignore` 排除。浏览器存储只保存栏宽、主题等界面偏好；登录凭据不进入浏览器持久存储。会话正文属于私有运行数据，不提交到仓库。SQLite 表结构、事务、离线迁移及回退流程由 005 定义。
+项目索引、会话展示记录等本地状态当前以 SQLite 存入本项目 `.local/web/`，与 `.local/dsh/` 分开并由 `.gitignore` 排除。主题、效果和栏宽保存到个人设置表；浏览器只缓存最近 Agent/会话选择，登录凭据不进入浏览器持久存储。会话正文属于私有运行数据，不提交到仓库。SQLite 表结构、事务、离线迁移及回退流程由 005 定义。
 
 保存了界面历史不等于恢复了 Agent 上下文。重新进入历史会话时，只有在代理公布并实际支持相应 load / resume 能力时才能继续原会话；否则允许查看记录，并明确提供“在此项目新建对话”。恢复失败也保留历史展示，不把整段旧消息自动重发来冒充恢复。待决审批不跨连接重放。历史回放与本地记录若同时存在，需要按来源处理，避免重复追加。
 
@@ -181,7 +216,7 @@ Stirrup 登录与 Agent 模型认证分开：前者决定能否访问工作台�
 
 设置拥有 `/settings/:section` 路由，支持刷新和浏览器返回。切换期间保留后台连接、流式输出、草稿、阅读位置和待处理审批，不销毁工作台状态。Escape 不关闭设置视图。
 
-外观选项即时生效并保存在浏览器；账号和存储信息来自已鉴权接口，不回显凭据。Passkey 和登录有效期继续由本地 `.env` 配置。模型、推理强度、Fast mode 和操作模式属于第三栏输入框下方的会话配置，遵循 007；项目添加仍属于对话视图第二栏。
+外观选项即时生效并保存到个人设置表；账号和存储信息来自已鉴权接口，不回显凭据。Passkey 与登录有效期由个人设置表管理。模型、推理强度、Fast mode 和操作模式属于第三栏输入框下方的会话配置，遵循 007；项目添加仍属于对话视图第二栏。
 
 ## Apple Liquid Glass 风格
 
@@ -231,6 +266,6 @@ Web 通过 CSS 材料效果表达该风格，不宣称复现 Apple 原生光学�
 
 会话记录以完整快照保存，每次请求上限 8 MiB、单条消息文本上限 100 万字符、最多 5000 条消息；超限会展示保存错误。流式内容约 500ms 合并保存，轮次结束和主动退出会立即保存；浏览器强制关闭或进程崩溃可能丢失尚未提交的尾部内容。刷新会断开当前页面的代理进程，恢复必须由代理实际支持。多窗口同时修改同一会话会被版本检查拒绝，界面提示刷新，不覆盖另一窗口的数据。
 
-Passkey 丢失时，由本机文件所有者备份 `.env`、清空凭证项并重新开启绑定；没有密码恢复入口。验收执行结果统一记录在 [CHANGELOG.md](../CHANGELOG.md)。
+Passkey 丢失时没有密码恢复入口；需由服务器文件所有者停止服务并备份数据库后维护个人记录。不得因域名不匹配或读取失败自动删除账号。验收执行结果统一记录在 [CHANGELOG.md](../CHANGELOG.md)。
 
 相关 Agent 接入契约：[008 · Antigravity](008_agy_acp.md)。

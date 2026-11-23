@@ -56,7 +56,7 @@ export function createSettingsPage(
       void api<SettingsSummary>('/api/settings')
         .then((summary) => {
           if (request !== generation) return;
-          if (section === 'account') refresh = renderAccount(host, summary, workspace, logout);
+          if (section === 'account') refresh = renderAccount(host, summary, workspace, logout, api);
           else renderStorage(host, summary);
         })
         .catch((error) => {

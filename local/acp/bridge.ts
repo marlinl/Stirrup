@@ -5,15 +5,13 @@ import { createWebSocketStream, WebSocketServer } from 'ws';
 import type { HttpServer } from 'vite';
 import { AGENTS, type AgentId } from '../../src/acp/agents.ts';
 import { agentLaunch, type AgentLaunch } from './launch.ts';
+import { sameOrigin } from '../http/request.ts';
+import { readSiteConfig, type SiteConfig } from '../config/site.ts';
 import type { BridgeGrant } from '../runtime.ts';
 
-/** Reject cross-origin or non-loopback upgrades; the actual bound port must match. */
-export function isLocalOrigin(request: IncomingMessage, port: number): boolean {
-  const host = request.headers.host;
-  return (
-    (host === `127.0.0.1:${port}` || host === `localhost:${port}`) &&
-    request.headers.origin === `http://${host}`
-  );
+/** Check the browser-facing origin for both direct development and HTTPS reverse-proxy upgrades. */
+export function isAllowedOrigin(request: IncomingMessage, site?: SiteConfig): boolean {
+  return sameOrigin(request, site);
 }
 
 /** Stop the adapter and its descendants; force termination if graceful exit stalls. */
@@ -26,7 +24,8 @@ function stopProcess(child: ChildProcess): void {
       if (process.platform === 'win32') child.kill(value);
       else process.kill(-pid, value);
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'ESRCH') console.error('ACP cleanup failed:', error);
+      if ((error as NodeJS.ErrnoException).code !== 'ESRCH')
+        console.error('ACP cleanup failed:', error);
     }
   };
   signal('SIGTERM');
@@ -40,6 +39,7 @@ export function attachAcpBridge(
   launch: typeof agentLaunch = agentLaunch,
   authorize: (request: IncomingMessage, id: AgentId) => BridgeGrant | undefined = () => undefined,
 ): () => void {
+  const site = readSiteConfig(cwd);
   const wss = new WebSocketServer({ noServer: true, maxPayload: 1024 * 1024 });
   const cleanups = new Set<() => void>();
   /** Authorize the upgrade before spawning a fixed local adapter for this connection. */
@@ -47,11 +47,12 @@ export function attachAcpBridge(
     const path = new URL(request.url ?? '/', 'http://localhost').pathname;
     const id = (Object.keys(AGENTS) as AgentId[]).find((id) => AGENTS[id].endpoint === path);
     if (!id) {
-      if (request.url?.startsWith('/acp/')) socket.end('HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n');
+      if (request.url?.startsWith('/acp/'))
+        socket.end('HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n');
       return;
     }
     const address = server.address();
-    if (!address || typeof address === 'string' || !isLocalOrigin(request, address.port)) {
+    if (!address || typeof address === 'string' || !isAllowedOrigin(request, site)) {
       socket.end('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n');
       return;
     }

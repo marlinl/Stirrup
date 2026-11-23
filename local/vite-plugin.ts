@@ -7,16 +7,26 @@ import { agentLaunch } from './acp/launch.ts';
 export function acpPlugin(): Plugin {
   let dispose: (() => void) | undefined;
   let runtime: WebRuntime | undefined;
+  /** Close each runtime once, including listen failures, so a failed startup cannot leave the storage locked. */
+  function closeRuntime(): void {
+    const ownedRuntime = runtime;
+    const ownedBridge = dispose;
+    runtime = undefined;
+    dispose = undefined;
+    try {
+      ownedRuntime?.close();
+    } finally {
+      ownedBridge?.();
+    }
+  }
   return {
     name: 'stirrup-acp',
     /** Bind the development server transport to the current workspace. */
     configureServer(server) {
       runtime = new WebRuntime(process.cwd());
       server.middlewares.use(runtime.middleware.bind(runtime));
-      server.httpServer?.once('close', () => {
-        dispose?.();
-        runtime?.close();
-      });
+      server.httpServer?.once('error', closeRuntime);
+      server.httpServer?.once('close', closeRuntime);
       if (server.httpServer)
         dispose = attachAcpBridge(
           server.httpServer,
@@ -29,10 +39,8 @@ export function acpPlugin(): Plugin {
     configurePreviewServer(server) {
       runtime = new WebRuntime(process.cwd());
       server.middlewares.use(runtime.middleware.bind(runtime));
-      server.httpServer?.once('close', () => {
-        dispose?.();
-        runtime?.close();
-      });
+      server.httpServer?.once('error', closeRuntime);
+      server.httpServer?.once('close', closeRuntime);
       dispose = attachAcpBridge(
         server.httpServer,
         process.cwd(),
@@ -42,8 +50,7 @@ export function acpPlugin(): Plugin {
     },
     /** Reap owned child processes when Vite closes. */
     closeBundle() {
-      runtime?.close();
-      dispose?.();
+      closeRuntime();
     },
   };
 }

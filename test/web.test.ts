@@ -3,33 +3,26 @@ import { test, type TestContext } from 'node:test';
 import {
   mkdtempSync,
   mkdirSync,
-  readFileSync,
   realpathSync,
   rmSync,
-  appendFileSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createServer } from 'node:http';
+import { createServer, request as httpRequest } from 'node:http';
 import { once } from 'node:events';
 import { fileURLToPath } from 'node:url';
 import { WebSocket } from 'ws';
 import { WorkspaceStore } from '../local/storage/workspace-store.ts';
 import { WebRuntime } from '../local/runtime.ts';
-import { readSessionTtlSeconds } from '../local/auth/sessions.ts';
 import { attachAcpBridge } from '../local/acp/bridge.ts';
-import {
-  prepareEnrollment,
-  readPasskeyConfig,
-  writePasskeyConfig,
-} from '../local/auth/passkey-store.ts';
 import { testAuthenticator } from './fixtures/passkey.ts';
 import type { Conversation, Workspace } from '../src/domain/models.ts';
 
 /** Start an isolated web API and harmless stdio child, never configuring the user's real account. */
-async function setup(t: TestContext) {
+async function setup(t: TestContext, externalOrigin?: string) {
   const root = mkdtempSync(join(tmpdir(), 'stirrup-web-'));
+  if (externalOrigin) writeFileSync(join(root, '.env'), `STIRRUP_SITE_URL=${externalOrigin}\n`);
   const runtime = new WebRuntime(root);
   const server = createServer((request, response) =>
     runtime.middleware(request, response, () => {
@@ -57,7 +50,9 @@ async function setup(t: TestContext) {
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   const address = server.address();
   assert.ok(address && typeof address !== 'string');
-  const origin = `http://localhost:${address.port}`;
+  const transport = `http://localhost:${address.port}`;
+  const origin = externalOrigin ?? transport;
+  const rpId = new URL(origin).hostname;
   t.after(async () => {
     runtime.close();
     dispose();
@@ -71,6 +66,7 @@ async function setup(t: TestContext) {
   const harness = {
     root,
     origin,
+    transport,
     launches,
     runtime,
     /** Read the currently authenticated test cookie without logging it. */
@@ -84,18 +80,34 @@ async function setup(t: TestContext) {
       data?: unknown,
       options: { origin?: string; anonymous?: boolean } = {},
     ) {
-      const response = await fetch(origin + path, {
-        method,
-        headers: {
-          ...(method !== 'GET'
-            ? {
-                Origin: options.origin ?? origin,
-                'Content-Type': 'application/json',
-              }
-            : {}),
-          ...(options.anonymous ? {} : { Cookie: harness.cookie }),
-        },
-        body: data === undefined ? undefined : JSON.stringify(data),
+      const headers = {
+        Host: new URL(origin).host,
+        ...(method !== 'GET'
+          ? { Origin: options.origin ?? origin, 'Content-Type': 'application/json' }
+          : {}),
+        ...(options.anonymous ? {} : { Cookie: harness.cookie }),
+      };
+      const body = data === undefined ? undefined : JSON.stringify(data);
+      // Node fetch normalizes Host; use HTTP transport to model the headers sent by a reverse proxy.
+      const response = await new Promise<Response>((resolve, reject) => {
+        const outgoing = httpRequest(transport + path, { method, headers }, (incoming) => {
+          const chunks: Buffer[] = [];
+          incoming.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
+          incoming.on('error', reject);
+          incoming.on('end', () => {
+            const responseHeaders = new Headers();
+            for (let index = 0; index < incoming.rawHeaders.length; index += 2)
+              responseHeaders.append(incoming.rawHeaders[index], incoming.rawHeaders[index + 1]);
+            resolve(
+              new Response(Buffer.concat(chunks), {
+                status: incoming.statusCode,
+                headers: responseHeaders,
+              }),
+            );
+          });
+        });
+        outgoing.on('error', reject);
+        outgoing.end(body);
       });
       if (!options.anonymous)
         for (const entry of response.headers.getSetCookie()) {
@@ -107,11 +119,10 @@ async function setup(t: TestContext) {
     /** Exercise real signature verification and retain its login cookie; registration itself grants no access. */
     async login() {
       if (!enrolled) {
-        const token = prepareEnrollment(root);
-        const options = await harness.request('/api/passkey/register/options', 'POST', { token });
+        const options = await harness.request('/api/passkey/register/options', 'POST', {});
         assert.equal(options.response.status, 200);
         const registered = await harness.request('/api/passkey/register/verify', 'POST', {
-          response: device.register(options.data.challenge, origin),
+          response: device.register(options.data.challenge, origin, 0x45, rpId),
         });
         assert.equal(registered.response.status, 200);
         assert.equal(registered.data.authenticated, false);
@@ -121,7 +132,7 @@ async function setup(t: TestContext) {
       const options = await harness.request('/api/passkey/login/options', 'POST', {});
       assert.equal(options.response.status, 200);
       const result = await harness.request('/api/passkey/login/verify', 'POST', {
-        response: device.authenticate(options.data.challenge, origin, ++counter),
+        response: device.authenticate(options.data.challenge, origin, ++counter, 5, rpId),
       });
       assert.equal(result.response.status, 200);
       return result;
@@ -167,7 +178,7 @@ test(
     );
     assert.equal(
       (await h.request('/api/passkey/register/options', 'POST', {})).response.status,
-      403,
+      200,
     );
     const result = await h.login();
     assert.match(result.response.headers.get('set-cookie')!, /HttpOnly; SameSite=Strict/);
@@ -282,7 +293,7 @@ test(
 );
 
 test(
-  'removing the .env public key revokes existing HTTP access and its active ACP socket',
+  'replacing the stored public key revokes existing HTTP access and its active ACP socket',
   { timeout: 10000 },
   async (t) => {
     const h = await setup(t);
@@ -304,21 +315,44 @@ test(
     t.after(() => socket.terminate());
     await once(socket, 'open');
     const closed = once(socket, 'close');
-    const config = readPasskeyConfig(h.root);
-    writePasskeyConfig(h.root, config, { ...config, credential: undefined });
+    const config = h.runtime.settings.readConfig()!;
+    h.runtime.settings.writeConfig(config, {
+      ...config,
+      credential: { ...config.credential, id: 'changed-key' },
+    });
     assert.equal((await h.request('/api/workspace')).response.status, 401);
     await closed;
   },
 );
 
-test('session lifetime reads .env only, defaults to twelve hours and rejects invalid values', async (t) => {
+test('personal-table lifetime defaults to twelve hours, rejects invalid values and ignores old env', async (t) => {
   const h = await setup(t);
-  assert.equal(readSessionTtlSeconds(h.root), 43200);
-  for (const value of ['', '0', '-1', '1.5', 'Infinity', 'abc', '31536001']) {
-    writeFileSync(join(h.root, '.env'), `STIRRUP_SESSION_TTL_SECONDS=${value}\n`);
-    assert.throws(() => readSessionTtlSeconds(h.root), /STIRRUP_SESSION_TTL_SECONDS/);
+  writeFileSync(join(h.root, '.env'), 'STIRRUP_SESSION_TTL_SECONDS=1\n');
+  const first = await h.login();
+  assert.match(first.response.headers.get('set-cookie')!, /Max-Age=43200/);
+  const account = (await h.request('/api/settings')).data.account;
+  for (const value of [0, -1, 1.5, 'abc', 31536001]) {
+    assert.equal(
+      (
+        await h.request('/api/settings/account', 'PUT', {
+          username: 'Stirrup',
+          sessionTtlSeconds: value,
+          revision: account.revision,
+        })
+      ).response.status,
+      400,
+    );
   }
-  writeFileSync(join(h.root, '.env'), 'STIRRUP_SESSION_TTL_SECONDS=31536000\n');
+  assert.equal(
+    (
+      await h.request('/api/settings/account', 'PUT', {
+        username: 'Stirrup',
+        sessionTtlSeconds: 31536000,
+        revision: account.revision,
+      })
+    ).response.status,
+    200,
+  );
   const login = await h.login();
   assert.match(login.response.headers.get('set-cookie')!, /Max-Age=31536000/);
   await new Promise<void>((resolve) => setImmediate(resolve));
@@ -330,7 +364,12 @@ test(
   { timeout: 10000 },
   async (t) => {
     const h = await setup(t);
-    appendFileSync(join(h.root, '.env'), 'STIRRUP_SESSION_TTL_SECONDS=1\n');
+    await h.login();
+    h.runtime.settings.saveAccount({
+      username: 'Stirrup',
+      sessionTtlSeconds: 1,
+      revision: h.runtime.settings.readConfig()!.revision,
+    });
     const login = await h.login();
     assert.match(login.response.headers.get('set-cookie')!, /Max-Age=1/);
     const data = (await h.request('/api/workspace')).data as Workspace;
@@ -350,14 +389,11 @@ test(
     t.after(() => socket.terminate());
     await once(socket, 'open');
     const closed = once(socket, 'close');
-    const path = join(h.root, '.env');
-    writeFileSync(
-      path,
-      readFileSync(path, 'utf8').replace(
-        'STIRRUP_SESSION_TTL_SECONDS=1\n',
-        'STIRRUP_SESSION_TTL_SECONDS=3600\n',
-      ),
-    );
+    h.runtime.settings.saveAccount({
+      username: 'Stirrup',
+      sessionTtlSeconds: 3600,
+      revision: h.runtime.settings.readConfig()!.revision,
+    });
     await closed;
     assert.equal((await h.request('/api/workspace')).response.status, 401);
     const next = await h.login();
@@ -378,12 +414,15 @@ test('settings metadata requires login, omits credentials and distinguishes curr
   assert.equal(first.data.storage.messageCount, 0);
   assert.equal(first.data.account.authMethod, 'passkey');
   assert.equal(JSON.stringify(first.data).includes('credential'), false);
-  const path = join(h.root, '.env');
-  const source = readFileSync(path, 'utf8');
-  writeFileSync(
-    path,
-    source.replace(/^STIRRUP_SESSION_TTL_SECONDS=.*\n?/m, '') +
-      '\nSTIRRUP_SESSION_TTL_SECONDS=120\n',
+  assert.equal(
+    (
+      await h.request('/api/settings/account', 'PUT', {
+        username: 'New name',
+        sessionTtlSeconds: 120,
+        revision: first.data.account.revision,
+      })
+    ).response.status,
+    200,
   );
   const next = (await h.request('/api/settings')).data;
   assert.equal(next.account.configuredSessionTtlSeconds, 120);
@@ -392,4 +431,87 @@ test('settings metadata requires login, omits credentials and distinguishes curr
     headers: { Cookie: h.cookie, Origin: 'https://outside.example' },
   });
   assert.equal(foreign.status, 403);
+});
+
+test('personal preferences require authentication, reject stale writes and never expose or overwrite the Passkey', async (t) => {
+  const h = await setup(t);
+  assert.equal((await h.request('/api/settings/preferences')).response.status, 401);
+  await h.login();
+  const config = h.runtime.settings.readConfig()!;
+  const first = await h.request('/api/settings/preferences');
+  assert.deepEqual(first.data.values, {
+    theme: 'system',
+    opaque: false,
+    motion: false,
+    ratio: 0.2,
+  });
+  const update = {
+    values: { theme: 'dark', opaque: true, motion: true, ratio: 0.4 },
+    revision: first.data.revision,
+  };
+  assert.equal((await h.request('/api/settings/preferences', 'PUT', update)).response.status, 200);
+  assert.equal((await h.request('/api/settings/preferences', 'PUT', update)).response.status, 409);
+  assert.equal(
+    (
+      await h.request('/api/settings/preferences', 'PUT', {
+        values: { ...update.values, credential: {} },
+        revision: first.data.revision + 1,
+      })
+    ).response.status,
+    400,
+  );
+  assert.deepEqual(h.runtime.settings.readConfig(), config);
+  assert.deepEqual((await h.request('/api/settings/preferences')).data.values, update.values);
+  const account = (await h.request('/api/settings')).data.account;
+  const change = { username: 'Personal', sessionTtlSeconds: 600, revision: account.revision };
+  assert.equal((await h.request('/api/settings/account', 'PUT', change)).response.status, 200);
+  assert.equal((await h.request('/api/settings/account', 'PUT', change)).response.status, 409);
+  assert.deepEqual(h.runtime.settings.readConfig()!.credential, config.credential);
+  assert.equal(
+    JSON.stringify((await h.request('/api/settings')).data).includes(config.credential.publicKey),
+    false,
+  );
+});
+
+test('HTTPS external origin registers, logs in and connects ACP through an HTTP proxy hop with Secure cookies', async (t) => {
+  const h = await setup(t, 'https://chat.example.com:8443');
+  const result = await h.login();
+  assert.match(result.response.headers.get('set-cookie')!, /; Secure/);
+  assert.equal(h.runtime.settings.readConfig()!.rpId, 'chat.example.com');
+  assert.equal((await h.request('/api/passkey/register/options', 'POST', {})).response.status, 409);
+  const foreign = await h.request(
+    '/api/logout',
+    'POST',
+    {},
+    { origin: 'https://attacker.example' },
+  );
+  assert.equal(foreign.response.status, 403);
+  const forged = await fetch(h.transport + '/api/auth', {
+    headers: {
+      Host: new URL(h.transport).host,
+      'X-Forwarded-Host': 'chat.example.com:8443',
+      'X-Forwarded-Proto': 'https',
+    },
+  });
+  assert.equal(forged.status, 403);
+  const data = (await h.request('/api/workspace')).data as Workspace;
+  const record = (
+    await h.request('/api/conversations', 'POST', {
+      projectId: data.projects[0].id,
+      agentId: 'codex',
+    })
+  ).data as Conversation;
+  const socket = new WebSocket(
+    h.transport.replace('http:', 'ws:') + `/acp/codex?conversation=${record.id}`,
+    {
+      origin: h.origin,
+      headers: { Host: new URL(h.origin).host, Cookie: h.cookie },
+    },
+  );
+  t.after(() => socket.terminate());
+  await once(socket, 'open');
+  assert.equal(h.launches.length, 1);
+  const closed = once(socket, 'close');
+  await h.request('/api/logout', 'POST', {});
+  await closed;
 });

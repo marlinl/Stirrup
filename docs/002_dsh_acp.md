@@ -53,7 +53,7 @@ DSH_HOME="$HOME/.dsh" npm run dev
 
 ACP 的 `initialize` 成功只说明协议已连接，不能证明模型认证成功。缺少凭据时，模型调用可能失败；应在启动环境或指定的 DSH 本地配置中补齐后重试。修改启动环境变量后需要重启 `npm run dev`。DSH 的工具授权由其本地策略控制，页面只能处理代理实际发送的审批请求，不能把“没有收到审批”解释为只读。
 
-两条入口都仅用于本机，检查 Host / Origin，拒绝未知 ACP 路径。启动命令固定为安装依赖中的 CLI，页面不能传入可执行文件或命令行。DSH 启动显式设置 `DSH_TELEMETRY_DISABLED=1`；Codex 的 `INITIAL_AGENT_MODE` 不作为 DSH 的权限策略。
+两条入口检查 Host / Origin，拒绝未知 ACP 路径。启动命令固定为安装依赖中的 CLI，页面不能传入可执行文件或命令行。DSH 启动显式设置 `DSH_TELEMETRY_DISABLED=1`；Codex 的 `INITIAL_AGENT_MODE` 不作为 DSH 的权限策略。
 
 ## 代码位置
 

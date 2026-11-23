@@ -7,7 +7,7 @@ export function renderUnavailable(): void {
   el('app').innerHTML =
     '<div class="boot"><h1>暂时无法连接工作空间</h1><p>请确认本地服务已启动，然后刷新页面重试。</p></div>';
 }
-/** Render single-user Passkey login; a terminal-issued link enables first-key enrollment on this same page. */
+/** Render first-use initialization when no personal record exists, otherwise show Passkey-only login. */
 export function renderLogin(
   identity: Identity,
   enrolling: boolean,
@@ -28,16 +28,19 @@ export function renderLogin(
       </form>
       <p class="login-note" id="passkey-note"></p>
     </section>
-    <p class="login-footer">Codex <span>·</span> DeepSeek Harness <span>·</span> Antigravity <span>·</span> 一个专注的空间</p>
+    <p class="login-footer">
+      Codex <span>·</span> DeepSeek Harness <span>·</span> Antigravity <span>·</span> 一个专注的空间
+    </p>
   </main>`;
   el('passkey-note').textContent = !available
-    ? '请使用支持 Passkey 的浏览器，通过 localhost 打开工作空间。'
+    ? '请使用支持 Passkey 的浏览器，通过受信任的 HTTPS 站点（或开发用 localhost）打开工作空间。'
     : enrolling
       ? '按系统提示创建通行密钥。绑定完成后即可使用 Passkey 登录。'
       : identity.configured
         ? '单用户 · Passkey 登录'
-        : '首次使用，请在项目终端运行 npm run passkey:setup，再打开生成的绑定链接。';
-  el<HTMLButtonElement>('login-submit').disabled = !available || (!enrolling && !identity.configured);
+        : '首次使用，创建 Passkey 后初始化个人设置。';
+  el<HTMLButtonElement>('login-submit').disabled =
+    !available || (!enrolling && !identity.configured);
   el('login-form').addEventListener('submit', async (event) => {
     event.preventDefault();
     const button = el<HTMLButtonElement>('login-submit');

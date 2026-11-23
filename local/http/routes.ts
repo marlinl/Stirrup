@@ -1,11 +1,13 @@
+import type { PersonalSettingsStore } from '../storage/personal-settings-store.ts';
+import { siteOrigin, type SiteConfig } from '../config/site.ts';
 import { randomBytes } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { PasskeyAuth } from '../auth/passkey-auth.ts';
-import { PasskeyError, readPasskeyConfig } from '../auth/passkey-store.ts';
-import { readSessionTtlSeconds, SessionManager } from '../auth/sessions.ts';
+import { PasskeyError } from '../auth/passkey-store.ts';
+import { SessionManager } from '../auth/sessions.ts';
 import { WorkspaceStore } from '../storage/workspace-store.ts';
 import { HttpError } from '../errors.ts';
-import { cookie, localHost, readBody, reply, sameOrigin } from './request.ts';
+import { cookie, validHost, readBody, reply, sameOrigin } from './request.ts';
 
 /** Dispatch the application's HTTP API; authentication, persistence and transport have separate owners. */
 export class ApiRouter {
@@ -13,7 +15,8 @@ export class ApiRouter {
 
   /** Receive the services owned by one local runtime, keeping route handlers free of persistence internals. */
   constructor(
-    private readonly root: string,
+    private readonly settings: PersonalSettingsStore,
+    private readonly site: SiteConfig,
     private readonly passkeys: PasskeyAuth,
     private readonly sessions: SessionManager,
     private readonly workspace: WorkspaceStore,
@@ -42,14 +45,15 @@ export class ApiRouter {
 
   /** Apply request-origin guards, dispatch public authentication routes, then require a session for workspace routes. */
   private async handle(request: IncomingMessage, response: ServerResponse): Promise<void> {
-    if (!localHost(request)) throw new HttpError(403, '仅允许本机访问');
+    if (!validHost(request, this.site)) throw new HttpError(403, '访问地址与站点配置不匹配');
     const path = new URL(request.url!, 'http://localhost').pathname;
     const method = request.method;
-    if (method !== 'GET' && !sameOrigin(request)) throw new HttpError(403, '请求来源不匹配');
+    if ((method !== 'GET' || request.headers.origin) && !sameOrigin(request, this.site))
+      throw new HttpError(403, '请求来源不匹配');
     if (path === '/api/auth' && method === 'GET') {
       const login = this.sessions.login(request);
       reply(response, 200, {
-        configured: !!readPasskeyConfig(this.root).credential,
+        configured: !!this.settings.readConfig(),
         authenticated: !!login,
         username: login?.username,
       });
@@ -68,15 +72,31 @@ export class ApiRouter {
       reply(response, 200, {});
       return;
     }
+    if (path === '/api/settings/preferences' && method === 'GET') {
+      reply(response, 200, this.settings.preferences());
+      return;
+    }
+    if (path === '/api/settings/preferences' && method === 'PUT') {
+      reply(response, 200, this.settings.savePreferences(await this.privateBody(request)));
+      return;
+    }
+    if (path === '/api/settings/account' && method === 'PUT') {
+      this.settings.saveAccount(await this.privateBody(request));
+      reply(response, 200, {});
+      return;
+    }
     if (path === '/api/settings' && method === 'GET') {
-      if (request.headers.origin && !sameOrigin(request))
+      if (request.headers.origin && !sameOrigin(request, this.site))
         throw new HttpError(403, '请求来源不匹配');
       const login = this.sessions.login(request)!;
+      const account = this.settings.readConfig()!;
       reply(response, 200, {
         account: {
-          username: login.username,
+          username: account.username,
+          revision: account.revision,
+          rpId: account.rpId,
           authMethod: 'passkey',
-          configuredSessionTtlSeconds: readSessionTtlSeconds(this.root),
+          configuredSessionTtlSeconds: account.sessionTtlSeconds,
           currentSessionExpiresAt: login.expires,
         },
         storage: this.workspace.summary(),
@@ -126,13 +146,13 @@ export class ApiRouter {
     if (this.attempts.length >= 30) throw new HttpError(429, '尝试过于频繁，请稍后再试');
     this.attempts.push(Date.now());
     const input = await readBody(request);
-    const origin = `http://${request.headers.host}`;
+    const origin = siteOrigin(this.site, request.socket.localPort);
     if (step === 'options') {
       const browser = randomBytes(32).toString('base64url');
-      const options = await this.passkeys.begin(kind, origin, browser, input.token);
+      const options = await this.passkeys.begin(kind, origin, browser);
       response.setHeader(
         'Set-Cookie',
-        `stirrup_webauthn=${browser}; Path=/api/passkey; HttpOnly; SameSite=Strict; Max-Age=300`,
+        `stirrup_webauthn=${browser}; Path=/api/passkey; HttpOnly; SameSite=Strict; Max-Age=300${this.site.secure ? '; Secure' : ''}`,
       );
       reply(response, 200, options);
     } else {
