@@ -10,5 +10,5 @@
     "types": ["node", "vite/client"],
     "allowImportingTsExtensions": true
   },
-  "include": ["src", "local", "test", "vite.config.ts"]
+  "include": ["src", "local", "migration", "test", "vite.config.ts"]
 }

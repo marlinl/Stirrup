@@ -36,6 +36,16 @@ src/
     ├── layout.ts            # 栏宽边界计算
     └── dom.ts               # DOM 查找、提示与事件错误处理
 
+migration/                  # 仓库级迁移工具，不属于 runtime
+├── 001_workspace.sql       # 初始工作区结构
+├── 002_agents.sql          # Agent 约束升级
+├── 003_personal_settings.sql # 个人设置结构
+├── schema.ts               # 有序 SQL 执行与版本登记
+├── prepare.ts              # 启动前检查、建库与升级
+├── lock.ts                 # 仅迁移工具执行期间持有的目录锁
+├── legacy-json.ts          # 离线 JSON 迁移、备份、核验与导出
+└── cli.ts                  # storage:prepare / storage:migrate / storage:export
+
 local/
 ├── vite-plugin.ts           # Vite dev / preview 的装配入口
 ├── config/
@@ -51,17 +61,13 @@ local/
 │   ├── passkey-store.ts     # 凭证类型、认证错误与身份摘要
 │   └── sessions.ts          # 登录 Session、Cookie、个人有效期、过期回收
 ├── storage/
-│   ├── database.ts          # SQLite 连接、PRAGMA、事务、目录锁与关闭
-│   ├── migrations/         # 连续编号 SQL；新建与升级共用
+│   ├── database.ts          # SQLite 连接、PRAGMA、版本验证、事务与关闭
 │   ├── personal-settings-store.ts # 单用户凭证与个人配置
 │   ├── workspace-store.ts  # 项目与会话 SQL 映射、版本冲突、统计
-│   ├── records.ts          # 消息字段校验
-│   └── legacy-json.ts      # 离线 JSON 迁移、备份、核验与导出
+│   └── records.ts          # 消息字段校验
 ├── acp/
 │   ├── launch.ts            # 固定 Agent 启动命令与环境
 │   └── bridge.ts            # WebSocket ↔ stdio、子进程生命周期
-├── cli/
-│   └── migrate-storage.ts  # npm run storage:migrate / storage:export
 ├── errors.ts               # 可安全返回给页面的本地操作错误
 └── validation.ts           # 持久化字段的基本校验
 ```

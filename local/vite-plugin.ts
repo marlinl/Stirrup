@@ -7,7 +7,7 @@ import { agentLaunch } from './acp/launch.ts';
 export function acpPlugin(): Plugin {
   let dispose: (() => void) | undefined;
   let runtime: WebRuntime | undefined;
-  /** Close each runtime once, including listen failures, so a failed startup cannot leave the storage locked. */
+  /** Close each runtime once, including listen failures, releasing database connections and Agent processes. */
   function closeRuntime(): void {
     const ownedRuntime = runtime;
     const ownedBridge = dispose;

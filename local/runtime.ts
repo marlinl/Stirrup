@@ -25,7 +25,7 @@ export class WebRuntime {
   private readonly routes: ApiRouter;
   private readonly active = new Set<string>();
 
-  /** Assemble authentication and an exclusive SQLite store; legacy JSON requires explicit offline migration. */
+  /** Assemble authentication and a prepared SQLite store; legacy JSON requires explicit offline migration. */
   constructor(root: string, dataDir?: string) {
     this.site = readSiteConfig(root);
     this.workspace = new WorkspaceStore(root, dataDir);

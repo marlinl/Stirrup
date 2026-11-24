@@ -1,3 +1,4 @@
+import { prepareStorage } from '../migration/prepare.ts';
 import assert from 'node:assert/strict';
 import { test, type TestContext } from 'node:test';
 import {
@@ -23,6 +24,7 @@ import type { Conversation, Workspace } from '../src/domain/models.ts';
 async function setup(t: TestContext, externalOrigin?: string) {
   const root = mkdtempSync(join(tmpdir(), 'stirrup-web-'));
   if (externalOrigin) writeFileSync(join(root, '.env'), `STIRRUP_SITE_URL=${externalOrigin}\n`);
+  prepareStorage(root);
   const runtime = new WebRuntime(root);
   const server = createServer((request, response) =>
     runtime.middleware(request, response, () => {

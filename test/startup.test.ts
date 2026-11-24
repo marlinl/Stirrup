@@ -144,6 +144,8 @@ test(
   { timeout: 30000 },
   async (t) => {
     const root = fixture(t);
+    const prepared = command(root, ['--import', import.meta.resolve('tsx'), join(repository, 'migration/cli.ts'), '--prepare']);
+    assert.equal(await prepared.done, 0, prepared.output());
     writeFileSync(join(root, 'index.html'), '<main>fixture</main>');
     mkdirSync(join(root, 'dist'));
     writeFileSync(join(root, 'dist/index.html'), '<main>fixture preview</main>');

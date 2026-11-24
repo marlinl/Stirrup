@@ -1,3 +1,6 @@
+import { SchemaMigration } from '../migration/schema.ts';
+import { lockStorage } from '../migration/lock.ts';
+import { prepareStorage } from '../migration/prepare.ts';
 import assert from 'node:assert/strict';
 import { test, type TestContext } from 'node:test';
 import {
@@ -13,8 +16,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { WorkspaceStore } from '../local/storage/workspace-store.ts';
-import { DatabaseConnection, DATABASE_NAME, lockStorage } from '../local/storage/database.ts';
-import { migrateStorage, exportStorage, readLegacy } from '../local/storage/legacy-json.ts';
+import { DatabaseConnection, DATABASE_NAME } from '../local/storage/database.ts';
+import { migrateStorage, exportStorage, readLegacy } from '../migration/legacy-json.ts';
 import type { Workspace } from '../src/domain/models.ts';
 
 /** Allocate a private fixture root and remove only that isolated test directory afterward. */
@@ -63,6 +66,7 @@ function fixture(root: string): { directory: string; data: Workspace } {
 
 test('SQLite round-trip, transaction failure rollback, stale revisions, foreign keys and durable reopen', (t) => {
   const root = rootFor(t);
+  prepareStorage(root);
   const store = new WorkspaceStore(root);
   t.after(() => store.close());
   const c = store.createConversation({
@@ -122,13 +126,14 @@ test('migration preserves exact records, backs up source, is idempotent and expo
   const { directory, data } = fixture(root);
   writeFileSync(join(root, '.env'), 'LOCAL_SENTINEL=unchanged\n');
   writeFileSync(join(directory, 'passkey-enrollment.json'), 'auth-sentinel');
-  assert.throws(() => new WorkspaceStore(root), /storage:migrate/);
+  assert.throws(() => prepareStorage(root), /storage:migrate/);
   const before = readLegacy(directory).digest;
   const result = migrateStorage(directory);
   assert.equal(result.migrated, true);
   assert.equal(readLegacy(result.backup!).digest, before);
   assert.equal(readLegacy(directory).digest, before);
   assert.equal(migrateStorage(directory).migrated, false);
+  prepareStorage(root);
   const store = new WorkspaceStore(root);
   assert.deepEqual(store.list(), data);
   store.saveConversation(data.conversations[0].id, {
@@ -163,16 +168,19 @@ test('corrupt, unknown-field and duplicate legacy data fail without publishing o
   }
 });
 
-test('runtime and migration share exclusive ownership; existing database is never overwritten', (t) => {
+test('migration ownership ends before runtime; existing database is never overwritten', (t) => {
   const root = rootFor(t);
   const { directory } = fixture(root);
   const unlock = lockStorage(directory);
   assert.throws(() => migrateStorage(directory), /锁定/);
   unlock();
   migrateStorage(directory);
+  prepareStorage(root);
   const store = new WorkspaceStore(root);
-  assert.throws(() => new WorkspaceStore(root), /锁定/);
-  assert.throws(() => exportStorage(directory), /锁定/);
+  assert.equal(existsSync(join(directory, '.storage.lock')), false);
+  const second = new WorkspaceStore(root);
+  assert.deepEqual(second.projects, store.projects);
+  second.close();
   store.close();
   writeFileSync(join(directory, 'projects.json'), '[]');
   assert.throws(() => migrateStorage(directory));
@@ -183,6 +191,7 @@ test('runtime and migration share exclusive ownership; existing database is neve
 
 test('SQLite busy timeout produces retryable 503 without changing a snapshot', (t) => {
   const root = rootFor(t);
+  prepareStorage(root);
   const store = new WorkspaceStore(root);
   t.after(() => store.close());
   const c = store.createConversation({
@@ -208,6 +217,7 @@ test('partial candidate is ignored and incomplete final database is rejected', (
   const { directory } = fixture(root);
   writeFileSync(join(directory, '.migration-interrupted.sqlite'), 'incomplete candidate');
   migrateStorage(directory);
+  prepareStorage(root);
   const store = new WorkspaceStore(root);
   store.close();
   const other = rootFor(t);
@@ -225,7 +235,7 @@ test('v1 upgrade preserves old messages and revisions and permits AGY after reop
   const filename = join(directory, DATABASE_NAME);
   const db = new DatabaseConnection(filename, true);
   const schema = readFileSync(
-    new URL('../local/storage/migrations/001_workspace.sql', import.meta.url),
+    new URL('../migration/001_workspace.sql', import.meta.url),
     'utf8',
   ).replace("'codex', 'dsh', 'agy'", "'codex', 'dsh'");
   db.db.exec(schema);
@@ -242,7 +252,8 @@ test('v1 upgrade preserves old messages and revisions and permits AGY after reop
   db.db.exec(`CREATE TRIGGER fail_upgrade BEFORE INSERT ON schema_migrations
     WHEN NEW.version=2 BEGIN SELECT RAISE(ABORT, 'injected migration failure'); END`);
   db.close();
-  assert.throws(() => new WorkspaceStore(root), /injected migration failure/);
+  assert.throws(() => new WorkspaceStore(root), /版本/);
+  assert.throws(() => prepareStorage(root), /injected migration failure/);
   const failed = new DatabaseConnection(filename);
   assert.equal(failed.db.prepare('SELECT count(*) AS n FROM schema_migrations').get()?.n, 1);
   assert.equal(failed.db.prepare('SELECT count(*) AS n FROM messages').get()?.n, 1);
@@ -254,6 +265,7 @@ test('v1 upgrade preserves old messages and revisions and permits AGY after reop
   );
   failed.db.exec('DROP TRIGGER fail_upgrade');
   failed.close();
+  prepareStorage(root);
   const store = new WorkspaceStore(root);
   const old = store.conversation(conversation);
   assert.equal(old.messages[0].text, 'retained');
@@ -291,13 +303,13 @@ test('v2 migration creates an empty personal table atomically and rejects missin
   const connection = new DatabaseConnection(filename, true);
   for (const [index, name] of ['001_workspace.sql', '002_agents.sql'].entries()) {
     connection.db.exec(
-      readFileSync(new URL(`../local/storage/migrations/${name}`, import.meta.url), 'utf8'),
+      readFileSync(new URL(`../migration/${name}`, import.meta.url), 'utf8'),
     );
     connection.db.prepare('INSERT INTO schema_migrations VALUES (?, 123, NULL)').run(index + 1);
   }
   connection.db.exec(`CREATE TRIGGER fail_personal BEFORE INSERT ON schema_migrations
     WHEN NEW.version=3 BEGIN SELECT RAISE(ABORT, 'personal migration failure'); END`);
-  assert.throws(() => connection.upgrade(), /personal migration failure/);
+  assert.throws(() => new SchemaMigration(connection).upgrade(), /personal migration failure/);
   assert.equal(
     connection.db.prepare("SELECT name FROM sqlite_master WHERE name='personal_settings'").get(),
     undefined,
@@ -308,14 +320,32 @@ test('v2 migration creates an empty personal table atomically and rejects missin
   );
   assert.equal(connection.db.prepare('PRAGMA foreign_keys').get()?.foreign_keys, 1);
   connection.db.exec('DROP TRIGGER fail_personal');
-  connection.upgrade();
+  new SchemaMigration(connection).upgrade();
   connection.verify();
   assert.equal(connection.db.prepare('SELECT count(*) AS n FROM personal_settings').get()?.n, 0);
-  connection.upgrade();
+  new SchemaMigration(connection).upgrade();
   assert.equal(connection.db.prepare('SELECT count(*) AS n FROM schema_migrations').get()?.n, 3);
   connection.db.exec('INSERT INTO schema_migrations VALUES (4, 123, NULL)');
-  assert.throws(() => connection.upgrade(), /版本/);
+  assert.throws(() => new SchemaMigration(connection).upgrade(), /版本/);
   connection.db.exec('DELETE FROM schema_migrations WHERE version=4 OR version=2');
-  assert.throws(() => connection.upgrade(), /版本/);
+  assert.throws(() => new SchemaMigration(connection).upgrade(), /版本/);
   connection.close();
+});
+
+test('startup preparation publishes one complete database; runtime never creates it', (t) => {
+  const root = rootFor(t);
+  const filename = join(root, '.local/web', DATABASE_NAME);
+  assert.throws(() => new WorkspaceStore(root), /数据库不存在/);
+  assert.equal(existsSync(filename), false);
+  prepareStorage(root);
+  const first = new WorkspaceStore(root);
+  const projects = first.projects;
+  const versions = first.connection.db.prepare('SELECT * FROM schema_migrations').all();
+  first.close();
+  prepareStorage(root);
+  const second = new WorkspaceStore(root);
+  assert.deepEqual(second.projects, projects);
+  assert.deepEqual(second.connection.db.prepare('SELECT * FROM schema_migrations').all(), versions);
+  assert.equal(existsSync(join(root, '.local/web/.storage.lock')), false);
+  second.close();
 });

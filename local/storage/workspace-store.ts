@@ -1,47 +1,25 @@
 import { isAgentId } from '../../src/acp/agents.ts';
 import { randomUUID } from 'node:crypto';
-import { existsSync, realpathSync, statSync } from 'node:fs';
+import { realpathSync, statSync } from 'node:fs';
 import { basename, isAbsolute, join } from 'node:path';
 import type { AgentId } from '../../src/acp/agents.ts';
 import type { Conversation, Message, Project, Workspace } from '../../src/domain/models.ts';
 import { HttpError } from '../errors.ts';
 import { string } from '../validation.ts';
-import { DATABASE_NAME, DatabaseConnection, lockStorage, SCHEMA_VERSION } from './database.ts';
+import { DATABASE_NAME, DatabaseConnection, SCHEMA_VERSION } from './database.ts';
 import { parseMessage } from './records.ts';
 
 /** Map application snapshots to SQLite; HTTP, credentials and live Agent connections remain outside storage. */
 export class WorkspaceStore {
   readonly connection: DatabaseConnection;
-  private readonly unlock: () => void;
-
-  /** Open one exclusively owned store, refusing to hide old JSON behind a new empty database. */
+  /** Open a prepared database; startup migration owns creation and upgrades. */
   constructor(root: string, dataDir = join(root, '.local/web')) {
-    this.unlock = lockStorage(dataDir);
-    let connection: DatabaseConnection | undefined;
+    const connection = new DatabaseConnection(join(dataDir, DATABASE_NAME));
     try {
-      const file = join(dataDir, DATABASE_NAME);
-      const fresh = !existsSync(file);
-      if (
-        fresh &&
-        (existsSync(join(dataDir, 'projects.json')) || existsSync(join(dataDir, 'conversations')))
-      )
-        throw new Error('发现旧 JSON 数据，请停止服务后运行 npm run storage:migrate');
-      connection = new DatabaseConnection(file, fresh);
-      if (fresh)
-        connection.initialize(() => {
-          connection!.db
-            .prepare('INSERT INTO projects VALUES (?, ?, ?, 0)')
-            .run(randomUUID(), basename(root), realpathSync(root));
-        });
-      connection.upgrade();
       connection.verify();
       this.connection = connection;
     } catch (error) {
-      try {
-        connection?.close();
-      } finally {
-        this.unlock();
-      }
+      connection.close();
       throw error;
     }
   }
@@ -220,12 +198,8 @@ export class WorkspaceStore {
     });
   }
 
-  /** Close the database before releasing exclusive directory ownership. */
+  /** Release this store's connection. */
   close(): void {
-    try {
-      this.connection.close();
-    } finally {
-      this.unlock();
-    }
+    this.connection.close();
   }
 }

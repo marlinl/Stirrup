@@ -1,3 +1,4 @@
+import { prepareStorage } from '../migration/prepare.ts';
 import assert from 'node:assert/strict';
 import { test, type TestContext } from 'node:test';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -13,6 +14,7 @@ import { testAuthenticator } from './fixtures/passkey.ts';
 function setup(t: TestContext) {
   const root = mkdtempSync(join(tmpdir(), 'stirrup-passkey-'));
   let now = Date.now();
+  prepareStorage(root);
   const workspace = new WorkspaceStore(root);
   const settings = new PersonalSettingsStore(workspace.connection);
   const auth = new PasskeyAuth(settings, readSiteConfig(root), () => now);

@@ -5,49 +5,14 @@ import {
   existsSync,
   mkdirSync,
   openSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
 } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname } from 'node:path';
 import { HttpError } from '../errors.ts';
 
 export const DATABASE_NAME = 'stirrup.sqlite';
-const MIGRATIONS = ['001_workspace.sql', '002_agents.sql', '003_personal_settings.sql'];
-export const SCHEMA_VERSION = MIGRATIONS.length;
+export const SCHEMA_VERSION = 3;
 
-/** Exclusively own a data directory across the web runtime and offline tools; stale locks require operator inspection. */
-export function lockStorage(directory: string): () => void {
-  mkdirSync(directory, { recursive: true, mode: 0o700 });
-  chmodSync(directory, 0o700);
-  const lock = join(directory, '.storage.lock');
-  try {
-    mkdirSync(lock, { mode: 0o700 });
-  } catch {
-    throw new Error(
-      '存储目录已锁定。请先停止 dev/preview 或迁移命令；遗留锁须确认原进程结束后再清理。',
-    );
-  }
-  try {
-    writeFileSync(
-      join(lock, 'owner.json'),
-      JSON.stringify({ pid: process.pid, startedAt: Date.now() }),
-      { mode: 0o600 },
-    );
-  } catch (error) {
-    rmSync(lock, { recursive: true, force: true });
-    throw error;
-  }
-  let released = false;
-  return () => {
-    if (!released) {
-      released = true;
-      rmSync(lock, { recursive: true, force: true });
-    }
-  };
-}
-
-/** Own one SQLite connection, PRAGMA policy and synchronous atomic transactions; callers own directory locking. */
+/** Own one SQLite connection, PRAGMA policy and synchronous atomic transactions; schema changes belong to the startup migration tool. */
 export class DatabaseConnection {
   readonly db: DatabaseSync;
   private closed = false;
@@ -77,57 +42,6 @@ export class DatabaseConnection {
     } catch (error) {
       this.db.close();
       throw error;
-    }
-  }
-
-  /** Build a fresh database with the same ordered migrations used for upgrades and atomically insert initial data. */
-  initialize(insert: () => void, legacyDigest: string | null = null): void {
-    this.applyMigrations(0, insert, legacyDigest);
-  }
-
-  /** Reject missing/future versions before applying the remaining SQL files as one atomic upgrade. */
-  upgrade(): void {
-    const versions = this.db
-      .prepare('SELECT version FROM schema_migrations ORDER BY version')
-      .all();
-    if (
-      !versions.length ||
-      versions.length > SCHEMA_VERSION ||
-      versions.some((row, index) => row.version !== index + 1)
-    )
-      throw new Error('数据库结构版本不受支持或迁移未完成');
-    if (versions.length === SCHEMA_VERSION) return;
-    if (
-      this.db.prepare('PRAGMA integrity_check').get()?.integrity_check !== 'ok' ||
-      this.db.prepare('PRAGMA foreign_key_check').all().length
-    )
-      throw new Error('数据库完整性校验失败');
-    this.applyMigrations(versions.length);
-  }
-
-  /** Run pending migration SQL in order, allowing table rebuilds while checking foreign keys before commit. */
-  private applyMigrations(
-    from: number,
-    insert?: () => void,
-    legacyDigest: string | null = null,
-  ): void {
-    this.db.exec('PRAGMA foreign_keys=OFF');
-    try {
-      this.transaction(() => {
-        for (let index = from; index < MIGRATIONS.length; index++) {
-          this.db.exec(
-            readFileSync(new URL(`./migrations/${MIGRATIONS[index]}`, import.meta.url), 'utf8'),
-          );
-          this.db
-            .prepare('INSERT INTO schema_migrations VALUES (?, ?, ?)')
-            .run(index + 1, Date.now(), index === 0 ? legacyDigest : null);
-        }
-        insert?.();
-        if (this.db.prepare('PRAGMA foreign_key_check').all().length)
-          throw new Error('数据库迁移外键校验失败');
-      });
-    } finally {
-      this.db.exec('PRAGMA foreign_keys=ON');
     }
   }
 

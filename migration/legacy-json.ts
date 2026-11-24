@@ -1,4 +1,4 @@
-import { isAgentId } from '../../src/acp/agents.ts';
+import { isAgentId } from '../src/acp/agents.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import {
   existsSync,
@@ -12,10 +12,13 @@ import {
 } from 'node:fs';
 import { isAbsolute, join } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
-import type { Workspace, Conversation, Project } from '../../src/domain/models.ts';
-import { string } from '../validation.ts';
-import { parseMessage } from './records.ts';
-import { DATABASE_NAME, DatabaseConnection, lockStorage } from './database.ts';
+import type { Workspace, Conversation, Project } from '../src/domain/models.ts';
+import { string } from '../local/validation.ts';
+import { parseMessage } from '../local/storage/records.ts';
+import { DATABASE_NAME, DatabaseConnection } from '../local/storage/database.ts';
+
+import { lockStorage } from './lock.ts';
+import { SchemaMigration } from './schema.ts';
 
 const uuid = /^[a-f0-9-]{36}$/;
 /** Reject unknown keys or non-object records so migrations cannot silently discard source fields. */
@@ -229,7 +232,7 @@ export function migrateStorage(directory: string): {
     const target = join(directory, DATABASE_NAME);
     if (existsSync(target)) {
       connection = new DatabaseConnection(target);
-      connection.upgrade();
+      new SchemaMigration(connection).upgrade();
       connection.verify();
       const marker = connection.db
         .prepare('SELECT legacy_digest FROM schema_migrations WHERE version=1')
@@ -258,7 +261,7 @@ export function migrateStorage(directory: string): {
     );
     if (readLegacy(backup).digest !== source.digest) throw new Error('源文件备份校验失败');
     connection = new DatabaseConnection(candidate, true);
-    connection.initialize(() => insertWorkspace(connection!, source.data), source.digest);
+    new SchemaMigration(connection).initialize(() => insertWorkspace(connection!, source.data), source.digest);
     connection.verify();
     if (!isDeepStrictEqual(readDatabase(connection), source.data))
       throw new Error('导入内容校验失败');
@@ -290,7 +293,7 @@ export function exportStorage(directory: string): string {
   let connection: DatabaseConnection | undefined;
   try {
     connection = new DatabaseConnection(join(directory, DATABASE_NAME));
-    connection.upgrade();
+    new SchemaMigration(connection).upgrade();
     connection.verify();
     const data = readDatabase(connection);
     const output = join(directory, 'backups', `export-${Date.now()}-${randomUUID()}`);

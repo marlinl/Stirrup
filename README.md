@@ -36,11 +36,11 @@ npm run storage:migrate
 npm run dev
 ```
 
-迁移会备份旧文件到 `.local/web/backups/json-*/`，验证后切换 SQLite；原 JSON 保留但不再写入。全新安装直接建库，无需迁移。运行实例与离线命令共用目录锁，不能同时操作同一存储目录。
+迁移会备份旧文件到 `.local/web/backups/json-*/`，验证后切换 SQLite；原 JSON 保留但不再写入。全新安装由启动前准备自动建库，无需导入旧 JSON。执行升级或离线命令前先停止服务；runtime 不持有迁移目录锁。
 
 如需回退格式，在停止服务后运行 `npm run storage:export`；它生成经过验证的 `backups/export-*/`，不会覆盖正在使用的数据或凭据。恢复旧 JSON 代码版本时只替换项目索引和对话文件，具体步骤见 005。
 
-已有 SQLite v1/v2 数据库会在持有目录锁时自动执行 migration 升级至 v3，保留原会话和消息。升级前应停止服务并备份 `.local/web/`；旧版代码不能直接打开升级后的数据库，恢复方法见 005。
+`npm run dev` / `npm run preview` 的启动前钩子执行 `npm run storage:prepare`：新安装建库，已有 SQLite v1/v2 数据库升级至 v3，保留原会话和消息；失败则不启动服务。直接使用 Vite 或自定义入口时先手动执行该准备命令。迁移工具仅在执行期间持锁，runtime 不负责实例唯一性或 schema 升级。升级前应停止服务并备份 `.local/web/`；旧版代码不能直接打开升级后的数据库，恢复方法见 005。
 
 ## Agent 凭据
 
@@ -63,7 +63,7 @@ Stirrup 登录和 Agent 模型认证是两个独立步骤。不要将模型密�
 
 **`.local/web/stirrup.sqlite`** 保存项目、对话、消息、草稿，以及独立的 **`personal_settings`** 表。个人表保存 Passkey 用户和公钥凭证、RP ID、显示名称、登录有效期与外观配置；默认有效期 12 小时。设置页保存名称和有效期，下一次登录使用新有效期，已有会话不延长。浏览器只缓存最近 Agent / 会话选择。
 
-SQL 结构唯一维护在 [local/storage/migrations/](local/storage/migrations/)，按编号执行，设计与恢复契约见 [005](docs/005_sqlite_storage_design.md)。`.env` 与 `.local/` 均被 Git 忽略并禁止通过 Web 静态路径读取。登录仍使用服务端内存 Session 与 HttpOnly Cookie，服务重启后重新登录。
+SQL 结构唯一维护在 [migration/](migration/)，按编号执行，设计与恢复契约见 [005](docs/005_sqlite_storage_design.md)。`.env` 与 `.local/` 均被 Git 忽略并禁止通过 Web 静态路径读取。登录仍使用服务端内存 Session 与 HttpOnly Cookie，服务重启后重新登录。
 
 旧 `.env` 账号和有效期项、旧绑定授权文件不再读取，也不会被自动删除。丢失 Passkey 没有密码恢复入口；数据库备份包含个人凭证和配置，聊天 JSON 导出不能代替完整备份。
 

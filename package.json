@@ -11,8 +11,11 @@
     "test": "node --import tsx --test test/*.test.ts",
     "smoke:agy": "node --import tsx test/smoke-dsh.ts --agent=agy",
     "smoke:dsh": "node --import tsx test/smoke-dsh.ts",
-    "storage:migrate": "node --import tsx local/cli/migrate-storage.ts",
-    "storage:export": "node --import tsx local/cli/migrate-storage.ts --export"
+    "storage:migrate": "node --import tsx migration/cli.ts",
+    "storage:export": "node --import tsx migration/cli.ts --export",
+    "storage:prepare": "node --import tsx migration/cli.ts --prepare",
+    "predev": "npm run storage:prepare",
+    "prepreview": "npm run storage:prepare"
   },
   "engines": {
     "node": ">=24.9.0"
