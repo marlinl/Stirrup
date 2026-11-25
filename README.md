@@ -25,7 +25,7 @@ npm run dev
 
 切换 Agent 或对话不会断开后台连接，各会话独立保存消息和草稿。刷新后可以查看历史；点击“继续会话”会按代理公布的 load / resume 能力尝试恢复。不支持恢复时请在同一项目新建对话，不会自动重发旧消息。
 
-设置沿用同一三栏工作台：左侧图标导航、中间设置分类、右侧设置内容。支持外观、Agent 状态、个人名称/登录有效期和存储信息，以及内联确认退出。切换设置保留后台输出与审批；退出会关闭当前登录下的代理连接。具体操作见 006。Codex / DSH 使用官方来源图标，来源见 [图标说明](src/ui/assets/README.md)。
+设置沿用同一三栏工作台：左侧图标导航、中间设置分类、右侧设置内容。支持外观、Agent 状态、个人名称/登录有效期和存储信息，以及内联确认退出。切换设置保留后台输出与审批；退出会关闭当前登录下的代理连接。具体操作见 006。Codex / DSH 使用官方来源图标，来源见 [图标说明](web/ui/assets/README.md)。
 
 ## 从旧 JSON 版本升级
 
@@ -40,7 +40,7 @@ npm run dev
 
 如需回退格式，在停止服务后运行 `npm run storage:export`；它生成经过验证的 `backups/export-*/`，不会覆盖正在使用的数据或凭据。恢复旧 JSON 代码版本时只替换项目索引和对话文件，具体步骤见 005。
 
-`npm run dev` / `npm run preview` 的启动前钩子执行 `npm run storage:prepare`：新安装建库，已有 SQLite v1/v2 数据库升级至 v3，保留原会话和消息；失败则不启动服务。直接使用 Vite 或自定义入口时先手动执行该准备命令。迁移工具仅在执行期间持锁，runtime 不负责实例唯一性或 schema 升级。升级前应停止服务并备份 `.local/web/`；旧版代码不能直接打开升级后的数据库，恢复方法见 005。
+项目启动时自动检查 SQLite：没有数据库就初始化，已有数据库则校验并应用缺少的 schema 版本，保留会话和消息；重复启动不会重新初始化。`npm run dev`、`npm run preview` 和 `npm start` 共用此流程，无需手动执行准备命令。升级前应停止旧服务并备份 `.local/web/`；失败时停止启动，恢复方法见 005。
 
 ## Agent 凭据
 
@@ -63,6 +63,8 @@ Stirrup 登录和 Agent 模型认证是两个独立步骤。不要将模型密�
 
 **`.local/web/stirrup.sqlite`** 保存项目、对话、消息、草稿，以及独立的 **`personal_settings`** 表。个人表保存 Passkey 用户和公钥凭证、RP ID、显示名称、登录有效期与外观配置；默认有效期 12 小时。设置页保存名称和有效期，下一次登录使用新有效期，已有会话不延长。浏览器只缓存最近 Agent / 会话选择。
 
+`src/` 是 Node 服务端源码，`src/main.ts` 负责监听端口；`web/` 是浏览器页面源码；`shared/` 保存跨端数据契约；`.local/` 是被 Git 忽略的运行数据目录，SQLite 位于 `.local/web/stirrup.sqlite`。
+
 SQL 结构唯一维护在 [migration/](migration/)，按编号执行，设计与恢复契约见 [005](docs/005_sqlite_storage_design.md)。`.env` 与 `.local/` 均被 Git 忽略并禁止通过 Web 静态路径读取。登录仍使用服务端内存 Session 与 HttpOnly Cookie，服务重启后重新登录。
 
 旧 `.env` 账号和有效期项、旧绑定授权文件不再读取，也不会被自动删除。丢失 Passkey 没有密码恢复入口；数据库备份包含个人凭证和配置，聊天 JSON 导出不能代替完整备份。
@@ -74,7 +76,7 @@ npm run build
 npm run preview
 ```
 
-`preview` 提供同样的登录和本地 ACP 转接。单独部署 `dist/` 静态文件无法连接本地代理。监听地址通过 `.env` 配置。
+`npm start`（`npm run preview` 的同义入口）启动构建后的 Node.js 服务，托管 `dist/web/` 并提供 API 和 ACP。单独部署前端静态文件无法连接代理。监听地址通过 `.env` 配置。
 
 `npm run smoke:dsh` 检查真实 DSH 握手、建会话和配置；提供模型凭据后，`npm run smoke:dsh -- --prompt` 可追加一次短回复测试。
 
@@ -85,8 +87,10 @@ npm run preview
 - [003 · Web 启动与页面设计](docs/003_web_app_design.md)
 - [004 · 代码分层与 Review 导航](docs/004_code_structure.md)
 - [005 · SQLite 本地数据存储设计](docs/005_sqlite_storage_design.md)
+- [Spec 001 · 数据库 Migration 执行规范](docs/specs/001_database_migration.md)
+- [Design 001 · 数据库 Migration 实现设计](docs/designs/001_database_migration.md)
 - [006 · 设置页面布局与操作设计](docs/006_settings_page_design.md)
 - [007 · 对话消息与输入区产品设计](docs/007_conversation_product_design.md)
 - [008 · Antigravity CLI ACP 对接](docs/008_agy_acp.md)
 
-代码目录、职责边界与推荐 review 顺序见 004。HTTP 路由集中在 `local/http/routes.ts`；页面渲染位于 `src/ui/`，浏览器入口 `src/main.ts` 仅负责启动。
+代码目录、职责边界与推荐 review 顺序见 004。HTTP 路由集中在 `src/http/routes.ts`；页面渲染位于 `web/ui/`，浏览器入口 `web/main.ts` 仅负责启动。

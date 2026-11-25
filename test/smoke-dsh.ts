@@ -1,10 +1,10 @@
-import { AGENTS, isAgentId } from '../src/acp/agents.ts';
+import { AGENTS, isAgentId } from '../web/acp/agents.ts';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import WebSocket from 'ws';
-import { attachAcpBridge } from '../local/acp/bridge.ts';
-import { AcpClient } from '../src/acp/client.ts';
-import { openWebSocket } from '../src/acp/websocket.ts';
+import { attachAcpBridge } from '../src/acp/bridge.ts';
+import { AcpClient } from '../web/acp/client.ts';
+import { openWebSocket } from '../web/acp/websocket.ts';
 
 /** Exercise the real selected Agent process through the same bridge and byte transport used by the page. */
 async function main(): Promise<void> {

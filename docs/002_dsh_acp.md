@@ -57,11 +57,11 @@ ACP 的 `initialize` 成功只说明协议已连接，不能证明模型认证�
 
 ## 代码位置
 
-- `src/acp/agents.ts`：固定代理的页面名称、入口和交互提示。
-- `local/acp/launch.ts`、`local/acp/bridge.ts`：各代理的启动参数、环境及共享 stdio 转接。
-- `src/acp/client.ts`：共享会话生命周期及配置选项更新。
-- `src/ui/pages/workspace.ts`、`src/ui/components/session-options.ts`：代理选择与实际能力对应的配置控件。
-- `src/domain/workspace.ts`：各会话独立状态与持久化；完整目录见 [004 · 代码分层](004_code_structure.md)。
+- `web/acp/agents.ts`：固定代理的页面名称、入口和交互提示。
+- `src/acp/launch.ts`、`src/acp/bridge.ts`：各代理的启动参数、环境及共享 stdio 转接。
+- `web/acp/client.ts`：共享会话生命周期及配置选项更新。
+- `web/ui/pages/workspace.ts`、`web/ui/components/session-options.ts`：代理选择与实际能力对应的配置控件。
+- `web/domain/workspace.ts`：各会话独立状态与持久化；完整目录见 [004 · 代码分层](004_code_structure.md)。
 - `test/bridge.test.ts`、`test/client.test.ts`：两条入口的隔离与 DSH 配置协议回归。
 
 ## 验证

@@ -1,7 +1,24 @@
+# Dependencies and generated output
 node_modules/
 dist/
+coverage/
+*.tsbuildinfo
+
+# Local runtime data and environment configuration
 .local/
 .env
 .env.*
 !.env.example
 *.log
+
+# Machine-local editor configuration
+.idea/
+*.iml
+.vscode/
+*.swp
+*.swo
+*~
+
+# Operating-system metadata
+.DS_Store
+Thumbs.db

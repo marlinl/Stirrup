@@ -1,6 +1,6 @@
-import { SchemaMigration } from '../migration/schema.ts';
-import { lockStorage } from '../migration/lock.ts';
-import { prepareStorage } from '../migration/prepare.ts';
+import { SchemaMigration } from '../src/storage/schema.ts';
+import { lockStorage } from '../src/storage/lock.ts';
+import { prepareStorage } from '../src/storage/prepare.ts';
 import assert from 'node:assert/strict';
 import { test, type TestContext } from 'node:test';
 import {
@@ -15,10 +15,10 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { WorkspaceStore } from '../local/storage/workspace-store.ts';
-import { DatabaseConnection, DATABASE_NAME } from '../local/storage/database.ts';
-import { migrateStorage, exportStorage, readLegacy } from '../migration/legacy-json.ts';
-import type { Workspace } from '../src/domain/models.ts';
+import { WorkspaceStore } from '../src/storage/workspace-store.ts';
+import { DatabaseConnection, DATABASE_NAME } from '../src/storage/database.ts';
+import { migrateStorage, exportStorage, readLegacy } from '../src/storage/legacy-json.ts';
+import type { Workspace } from '../shared/models.ts';
 
 /** Allocate a private fixture root and remove only that isolated test directory afterward. */
 function rootFor(t: TestContext): string {
@@ -252,8 +252,7 @@ test('v1 upgrade preserves old messages and revisions and permits AGY after reop
   db.db.exec(`CREATE TRIGGER fail_upgrade BEFORE INSERT ON schema_migrations
     WHEN NEW.version=2 BEGIN SELECT RAISE(ABORT, 'injected migration failure'); END`);
   db.close();
-  assert.throws(() => new WorkspaceStore(root), /版本/);
-  assert.throws(() => prepareStorage(root), /injected migration failure/);
+  assert.throws(() => new WorkspaceStore(root), /injected migration failure/);
   const failed = new DatabaseConnection(filename);
   assert.equal(failed.db.prepare('SELECT count(*) AS n FROM schema_migrations').get()?.n, 1);
   assert.equal(failed.db.prepare('SELECT count(*) AS n FROM messages').get()?.n, 1);
@@ -265,7 +264,6 @@ test('v1 upgrade preserves old messages and revisions and permits AGY after reop
   );
   failed.db.exec('DROP TRIGGER fail_upgrade');
   failed.close();
-  prepareStorage(root);
   const store = new WorkspaceStore(root);
   const old = store.conversation(conversation);
   assert.equal(old.messages[0].text, 'retained');
@@ -332,17 +330,14 @@ test('v2 migration creates an empty personal table atomically and rejects missin
   connection.close();
 });
 
-test('startup preparation publishes one complete database; runtime never creates it', (t) => {
+test('startup initializes SQLite automatically and reopening preserves data and migration records', (t) => {
   const root = rootFor(t);
   const filename = join(root, '.local/web', DATABASE_NAME);
-  assert.throws(() => new WorkspaceStore(root), /数据库不存在/);
   assert.equal(existsSync(filename), false);
-  prepareStorage(root);
   const first = new WorkspaceStore(root);
   const projects = first.projects;
   const versions = first.connection.db.prepare('SELECT * FROM schema_migrations').all();
   first.close();
-  prepareStorage(root);
   const second = new WorkspaceStore(root);
   assert.deepEqual(second.projects, projects);
   assert.deepEqual(second.connection.db.prepare('SELECT * FROM schema_migrations').all(), versions);

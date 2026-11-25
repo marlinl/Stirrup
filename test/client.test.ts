@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test, type TestContext } from 'node:test';
 import * as acp from '@agentclientprotocol/sdk';
-import { AcpClient, type Permission } from '../src/acp/client';
+import { AcpClient, type Permission } from '../web/acp/client';
 
 /** Provide a controllable promise for deterministic turn, notification, and approval timing. */
 function deferred<T>() {

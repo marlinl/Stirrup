@@ -1,13 +1,13 @@
-import { prepareStorage } from '../migration/prepare.ts';
+import { prepareStorage } from '../src/storage/prepare.ts';
 import assert from 'node:assert/strict';
 import { test, type TestContext } from 'node:test';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { PasskeyAuth } from '../local/auth/passkey-auth.ts';
-import { WorkspaceStore } from '../local/storage/workspace-store.ts';
-import { PersonalSettingsStore } from '../local/storage/personal-settings-store.ts';
-import { readSiteConfig } from '../local/config/site.ts';
+import { PasskeyAuth } from '../src/auth/passkey-auth.ts';
+import { WorkspaceStore } from '../src/storage/workspace-store.ts';
+import { PersonalSettingsStore } from '../src/storage/personal-settings-store.ts';
+import { readSiteConfig } from '../src/config/site.ts';
 import { testAuthenticator } from './fixtures/passkey.ts';
 
 /** Allocate disposable account state and a controllable clock; never touch the user's .env. */

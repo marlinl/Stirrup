@@ -125,14 +125,14 @@ Fast mode 与 Effort 是独立设置：开启快速模式不代表降低推理�
 
 | 模块 | 职责 |
 | --- | --- |
-| `src/ui/pages/workspace-shell.ts` | 输入框、下方配置行和发送操作的稳定布局，标题区只保留会话/连接操作 |
-| `src/ui/components/composer.ts` | 根据会话状态协调输入、发送、停止和下方配置控件 |
-| `src/ui/components/session-options.ts` | 模型、Effort、Fast mode、操作模式和其他配置的控件渲染、交互与局部反馈 |
-| `src/acp/agents.ts` | 各 Agent 配置项的明确语义映射，不提供未经协商的可选值 |
-| `src/acp/client.ts` | 配置验证、协议调用、状态互斥和确认结果，不依赖 DOM |
-| `src/domain/workspace.ts` | 会话归属、草稿、消息、独立连接与保存，不根据当前可见页面路由回复 |
-| `src/ui/components/messages.ts`、`permissions.ts` | 消息阅读、工具详情与所属请求审批 |
-| `src/ui/styles/composer.css` | 输入区及配置行的间距、换行和状态样式，复用全局主题 |
+| `web/ui/pages/workspace-shell.ts` | 输入框、下方配置行和发送操作的稳定布局，标题区只保留会话/连接操作 |
+| `web/ui/components/composer.ts` | 根据会话状态协调输入、发送、停止和下方配置控件 |
+| `web/ui/components/session-options.ts` | 模型、Effort、Fast mode、操作模式和其他配置的控件渲染、交互与局部反馈 |
+| `web/acp/agents.ts` | 各 Agent 配置项的明确语义映射，不提供未经协商的可选值 |
+| `web/acp/client.ts` | 配置验证、协议调用、状态互斥和确认结果，不依赖 DOM |
+| `web/domain/workspace.ts` | 会话归属、草稿、消息、独立连接与保存，不根据当前可见页面路由回复 |
+| `web/ui/components/messages.ts`、`permissions.ts` | 消息阅读、工具详情与所属请求审批 |
+| `web/ui/styles/composer.css` | 输入区及配置行的间距、换行和状态样式，复用全局主题 |
 
 验收要求：
 

@@ -2,7 +2,7 @@
 
 ## 范围与布局约定
 
-设置由 `src/ui/pages/settings.ts` 和 `src/ui/settings/` 渲染在三栏工作台中。
+设置由 `web/ui/pages/settings.ts` 和 `web/ui/settings/` 渲染在三栏工作台中。
 
 **设置必须沿用首页的三栏工作台：第一栏为 Agent/设置图标，第二栏为设置分类，第三栏为所选分类的内容。设置主内容不得放在 dialog、模态遮罩、居中卡片弹窗或独立单栏页面中。** 设置布局和操作以本篇为准。
 
@@ -208,15 +208,15 @@ Agent 配置通过以下专用接口保存。
 
 | 模块 | 改动职责 |
 | --- | --- |
-| `src/app/routes.ts` | 增加设置分类路由、前进/后退和 URL 归一化 |
-| `src/app/application.ts` | 持有同一工作台控制器和页面；仅登录生命周期变化时销毁 |
-| `src/ui/pages/workspace-shell.ts` | 抽出可共享的三栏外壳，保持导航和分隔线一致 |
-| `src/ui/pages/settings.ts` | 挂载分类导航、第三栏内容与加载/错误状态 |
-| `src/ui/settings/` | 外观、Agent、账号、安全退出确认和存储区域渲染；不直接写文件 |
-| `src/ui/dialogs/` | 承载添加项目等短操作；设置主内容不使用弹层，会话配置按 007 放在输入框下方 |
-| `src/ui/pages/workspace.ts`、`src/ui/view-state.ts` | 持有工作台生命周期内的阅读状态；聊天 DOM 隐藏时暂停渲染，返回时按原状态更新 |
-| `src/ui/styles/` | 为设置内容补充同主题样式，复用三栏宽度及响应式规则 |
-| `local/http/routes.ts` | 设置摘要及 Agent 配置/测试接口，委托对应模块校验、保存与测试 |
+| `web/app/routes.ts` | 增加设置分类路由、前进/后退和 URL 归一化 |
+| `web/app/application.ts` | 持有同一工作台控制器和页面；仅登录生命周期变化时销毁 |
+| `web/ui/pages/workspace-shell.ts` | 抽出可共享的三栏外壳，保持导航和分隔线一致 |
+| `web/ui/pages/settings.ts` | 挂载分类导航、第三栏内容与加载/错误状态 |
+| `web/ui/settings/` | 外观、Agent、账号、安全退出确认和存储区域渲染；不直接写文件 |
+| `web/ui/dialogs/` | 承载添加项目等短操作；设置主内容不使用弹层，会话配置按 007 放在输入框下方 |
+| `web/ui/pages/workspace.ts`、`web/ui/view-state.ts` | 持有工作台生命周期内的阅读状态；聊天 DOM 隐藏时暂停渲染，返回时按原状态更新 |
+| `web/ui/styles/` | 为设置内容补充同主题样式，复用三栏宽度及响应式规则 |
+| `src/http/routes.ts` | 设置摘要及 Agent 配置/测试接口，委托对应模块校验、保存与测试 |
 
 添加项目等短操作可使用弹层，会话配置按 007 使用输入框下方控件与就近选择菜单；这不改变“设置主页面必须三栏”的要求。无需引入前端框架或通用插件系统来实现本篇。
 
@@ -237,6 +237,6 @@ Agent 配置通过以下专用接口保存。
 13. 本地默认入口保持可用；兼容网络端点能完成双向审批与取消，跨帧/合帧正确；远端 cwd 不存在时明确失败。
 14. 登录页仍保持独立布局；浅色、深色、减少效果、键盘焦点和移动端设置分类均可用。
 
-图标使用官方来源资源并随构建打包，资源归属见 [图标说明](../src/ui/assets/README.md)。实现操作、视觉检查与回归结果统一记录在 [CHANGELOG.md](../CHANGELOG.md)。
+图标使用官方来源资源并随构建打包，资源归属见 [图标说明](../web/ui/assets/README.md)。实现操作、视觉检查与回归结果统一记录在 [CHANGELOG.md](../CHANGELOG.md)。
 
 相关 Agent 接入契约：[008 · Antigravity](008_agy_acp.md)。

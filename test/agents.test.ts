@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { AGENT_IDS, isAgentId, sessionOptions } from '../src/acp/agents.ts';
-import { readChatRoute, workspaceDestination } from '../src/app/routes.ts';
-import type { Preferences } from '../src/app/preferences.ts';
+import { AGENT_IDS, isAgentId, sessionOptions } from '../web/acp/agents.ts';
+import { readChatRoute, workspaceDestination } from '../web/app/routes.ts';
+import type { Preferences } from '../web/app/preferences.ts';
 
 test('AGY deep links survive login and unknown or inherited keys are rejected', (t) => {
   const original = Object.getOwnPropertyDescriptor(globalThis, 'location');

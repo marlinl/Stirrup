@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { WorkspaceController } from '../src/domain/workspace';
-import type { Api } from '../src/api/client';
-import type { Conversation } from '../src/domain/models';
-import { sidebarWidth } from '../src/ui/layout';
+import { WorkspaceController } from '../web/domain/workspace';
+import type { Api } from '../web/api/client';
+import type { Conversation } from '../shared/models';
+import { sidebarWidth } from '../web/ui/layout';
 
 /** Create independent saved records without starting a process or using real account data. */
 function records(): Conversation[] {
@@ -146,13 +146,13 @@ test('busy or pending approval cannot submit; failed prompts retain the draft wi
     /** No transport exists in this fixture. */
     close() {},
   };
-  controller.state('c0').client = client as unknown as import('../src/acp/client').AcpClient;
+  controller.state('c0').client = client as unknown as import('../web/acp/client').AcpClient;
   controller.draft('c0', 'keep');
   await assert.rejects(controller.send('c0', 'keep'), /等待/);
   assert.equal(controller.record('c0').draft, 'keep');
   assert.equal(controller.record('c0').messages.length, 0);
   client.phase = 'ready';
-  controller.state('c0').permissions = [{}] as import('../src/acp/client').Permission[];
+  controller.state('c0').permissions = [{}] as import('../web/acp/client').Permission[];
   await assert.rejects(controller.send('c0', 'keep'), /等待/);
   controller.state('c0').permissions = [];
   await controller.send('c0', 'keep');

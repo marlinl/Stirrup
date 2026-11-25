@@ -29,9 +29,9 @@ test('settings keeps streaming, permissions, draft and reading state; history/de
         load(id) {
           if (id === entry)
             return `
-      import {createWorkspacePage} from '/src/ui/pages/workspace.ts';
-      import {WorkspaceController} from '/src/domain/workspace.ts';
-      import {loadPreferences,connectPreferences} from '/src/app/preferences.ts';
+      import {createWorkspacePage} from '/web/ui/pages/workspace.ts';
+      import {WorkspaceController} from '/web/domain/workspace.ts';
+      import {loadPreferences,connectPreferences} from '/web/app/preferences.ts';
       void (async () => {
       const controller=new WorkspaceController(window.fixtureApi,()=>page?.scheduleRender());
       controller.projects=[{id:'p',name:'Project',cwd:'/project'}];
@@ -110,7 +110,7 @@ test('settings keeps streaming, permissions, draft and reading state; history/de
   const { controller, page } = (
     w as unknown as {
       harness: {
-        controller: import('../src/domain/workspace').WorkspaceController;
+        controller: import('../web/domain/workspace').WorkspaceController;
         page: { dispose(): void };
       };
     }
@@ -166,7 +166,7 @@ test('settings keeps streaming, permissions, draft and reading state; history/de
     close: () => {
       closed++;
     },
-  } as unknown as import('../src/acp/client').AcpClient;
+  } as unknown as import('../web/acp/client').AcpClient;
   controller.state('c0').permissions = [
     {
       id: 7,
@@ -176,7 +176,7 @@ test('settings keeps streaming, permissions, draft and reading state; history/de
         options: [{ optionId: 'allow', name: 'Allow', kind: 'allow_once' }],
       },
     },
-  ] as unknown as import('../src/acp/client').Permission[];
+  ] as unknown as import('../web/acp/client').Permission[];
   controller.update('c0', {
     sessionUpdate: 'agent_message_chunk',
     content: { type: 'text', text: 'background reply' },

@@ -25,13 +25,13 @@
 
 ## 文件、驱动与连接
 
-数据库固定放在本项目 `.local/web/stirrup.sqlite`，不放到被操作的各个项目目录。目录权限为 0700，数据库及运行产生的辅助文件限制为当前用户可读写，继续由 Git 忽略和 Web 文件访问规则保护。
+数据库路径由根目录 `.env` 的 `STIRRUP_DATABASE_PATH` 指定，默认本项目 `.local/web/stirrup.sqlite`；解析和启动契约见 specs/001，不随会话项目目录变化。目录权限为 0700，数据库及运行产生的辅助文件限制为当前用户可读写，继续由 Git 忽略和 Web 文件访问规则保护。
 
 采用 Node 内置 `node:sqlite` 的 `DatabaseSync` 接口，将连接和参数化语句集中在存储层，不引入 ORM。数据库调用是同步的，应保持事务短小，事务内不等待网络、ACP、用户审批或异步文件操作。[Node SQLite 文档](https://nodejs.org/api/sqlite.html)
 
 最低运行版本为 Node 24.9.0；数据库连接依赖 `DatabaseSync`、SQLite STRICT 表和 JSON 函数。启动时检查必要能力与结构版本，无法满足时拒绝启动。
 
-每个 Web 实例持有一个存储连接，聊天与个人设置共享连接。连接配置由 [database.ts](../local/storage/database.ts) 统一负责：开启外键，使用 WAL、FULL 同步级别和 1000ms 忙等待；配置在事务外完成。
+每个 Web 实例持有一个存储连接，聊天与个人设置共享连接。连接配置由 [database.ts](../src/storage/database.ts) 统一负责：开启外键，使用 WAL、FULL 同步级别和 1000ms 忙等待；配置在事务外完成。
 
 必须检查配置结果及 JSON 能力，失败时拒绝以“空数据”继续启动。显式开启外键，不能依赖驱动默认值。[SQLite 外键说明](https://sqlite.org/foreignkeys.html)
 
@@ -39,19 +39,11 @@ WAL 仍然只有一个同时写入者，可能产生 `stirrup.sqlite-wal`、`sti
 
 ## SQL migrations 与 schema
 
-SQL 的唯一维护位置为 [migration/](../migration/)，文档不复制 SQL。全新建库与已有库升级执行同一套有序文件：
+SQL 的唯一维护位置为 [migration/](../migration/)。索引表、文件命名、连续版本检查、逐版本 up/down、事务边界和启动集成统一遵循 [specs/001 · 数据库 Migration 执行规范](specs/001_database_migration.md)，本篇不维护第二套执行规则；独立 `src/sql/` 模块的接口与实现见 [Design 001](designs/001_database_migration.md)。
 
-| 版本 | 文件 | 职责 |
-| --- | --- | --- |
-| 1 | [001_workspace.sql](../migration/001_workspace.sql) | 创建迁移记录、项目、会话、消息表及索引 |
-| 2 | [002_agents.sql](../migration/002_agents.sql) | 重建会话 Agent 约束，支持 Codex / DSH / AGY |
-| 3 | [003_personal_settings.sql](../migration/003_personal_settings.sql) | 创建个人设置独立表；不预插入账号 |
+`migration` 表由执行器自动创建，保存当前有效的版本、创建时间与 up 文件名；业务 SQL 不创建该表。业务结构按工作区、Agent 约束、个人设置的顺序演进，账号是否初始化仅取决于个人表是否存在记录。业务参数化查询仍位于各 store 内。
 
-[migration/schema.ts](../migration/schema.ts) 的 `MIGRATIONS` 按顺序列出文件，应用要求的 `SCHEMA_VERSION` 与清单长度一致。新增 schema 变更时追加连续编号 SQL 和清单项，不修改已发布迁移的语义，不维护另一份全量 schema。应用的参数化业务查询留在各 store 内，不属于 migration。
-
-`schema_migrations` 记录成功执行的版本、时间及原 JSON 导入摘要。运行前验证版本连续且受支持；版本有缺口、为空或高于当前代码时拒绝升级。全新库执行全部文件后写入默认项目，已有库仅执行未应用文件。DDL、版本登记和初始化记录在同一事务提交；失败全部回滚，重试不产生副本。
-
-重建表时在事务外暂时关闭外键，提交前检查外键完整性，最终恢复外键。`npm run dev` / `npm run preview` 分别通过 `predev` / `prepreview` 在启动服务前执行 `npm run storage:prepare`，检查并执行待应用的 schema migration。迁移工具之间使用短期目录锁，准备完成后立即释放；runtime 不持有目录锁、不创建数据库、不执行 DDL 或升级，仅打开并验证当前版本。直接运行 Vite 或自定义启动入口时，必须先执行 `npm run storage:prepare`。账号是否初始化取决于个人表记录，不能以 schema 版本、旧 `.env` 内容或历史会话存在与否判断。
+新库和已有库共用自动 up 流程。文件必须连续，索引必须是文件版本链的连续前缀；每个版本的 SQL 与索引变化原子提交。回退只能从当前最大版本逐个撤销；旧索引的显式接入规则见 specs/001。业务初始化在结构迁移成功后执行，不把账号或默认项目是否存在当作 migration 版本判断依据。
 
 固定检索字段用普通列，可变消息与个人显示偏好使用 JSON 文本，不使用 JSONB。数据库通过 JSON 有效性与对象类型约束兜底，业务层仍负责字段、长度和范围校验。[SQLite JSON 文档](https://sqlite.org/json1.html)
 
@@ -85,7 +77,7 @@ SQL 的唯一维护位置为 [migration/](../migration/)，文档不复制 SQL�
 | `preferences_revision` | 显示偏好的独立写入版本，避免登录计数器变化干扰外观保存 |
 | `updated_at` | 最后一次个人记录更新的毫秒时间戳 |
 
-[PersonalSettingsStore](../local/storage/personal-settings-store.ts) 只操作该表。没有记录时 `/api/auth` 返回未初始化，页面直接创建 Passkey；生成注册选项不插入记录，验证成功后在事务中检查空表并插入账号和默认配置。并发初始化只有一个提交成功，不替换先完成的凭证。失败、取消、超时及服务重启均不得产生半初始化用户。
+[PersonalSettingsStore](../src/storage/personal-settings-store.ts) 只操作该表。没有记录时 `/api/auth` 返回未初始化，页面直接创建 Passkey；生成注册选项不插入记录，验证成功后在事务中检查空表并插入账号和默认配置。并发初始化只有一个提交成功，不替换先完成的凭证。失败、取消、超时及服务重启均不得产生半初始化用户。
 
 旧 `.env` 用户、公钥、有效期和浏览器中的外观配置不导入；旧文件不自动删除。新的个人表是唯一来源。数据库读取/损坏错误必须向上抛出，不能将错误解释为无数据并重新开放初始化。
 
@@ -136,14 +128,14 @@ SQL 的唯一维护位置为 [migration/](../migration/)，文档不复制 SQL�
 ### 建库与切换
 
 1. 保留原文件，并把本次源清单、摘要和源文件复制到 `.local/web/backups/json-<时间戳>/`；仅含项目和对话，不复制凭据文件。
-2. 在同目录新建临时候选数据库，执行建表及全部导入；项目、对话、消息、`schema_migrations` 全部版本标记一次事务提交。`legacy_digest` 记录源清单摘要。
+2. 在同目录新建临时候选数据库，通过 migration 执行器完成结构初始化，再以独立事务导入全部项目、对话与消息。源清单摘要由独立的导入元数据保存，不写入 migration 表；结构初始化和数据导入失败均不得发布候选库。
 3. 验证项目/会话/逐会话消息数量、原 ID、顺序、内容、草稿、时间和版本；执行外键与数据库完整性检查。比较使用解析后的结构，不要求 JSON 空格或对象键顺序相同。
 4. 复核源清单未改变，完成 checkpoint，关闭候选连接；没有未合并 WAL 数据时才原子发布为 `stirrup.sqlite`。实现采用同文件系统硬链接发布后移除临时候选名称，确保目标存在时失败，避免普通 rename 覆盖已有文件。
 5. 下次启动只使用已验证数据库，旧 JSON 保留为历史源，不再读写、不做双写。
 
-重复运行：已有完成标记且源摘要相同则报告“已迁移”，不重复导入；目标存在而标记不完整、来源不同或结构版本未知时拒绝覆盖。中断留下的临时候选库不能被服务自动选中，应清理/重建候选后重试。
+重复运行：已有导入完成标记且源摘要相同则报告“已迁移”，不重复导入；目标存在而标记不完整、来源不同或结构版本未知时拒绝覆盖。中断留下的临时候选库不能被服务自动选中，应清理/重建候选后重试。
 
-没有旧项目/对话、也没有数据库的全新安装，启动前准备在临时候选库中执行完整 migration 清单、创建默认项目并核验，关闭后以硬链接发布，目标存在时拒绝覆盖；个人设置表保持为空。已有 JSON 而没有数据库时提示先迁移；已有有效数据库时只以数据库为准。禁止创建空库遮住待迁移历史。
+没有旧项目/对话、也没有数据库的全新安装，在配置的数据库中逐版本执行 migration，再以业务事务初始化默认项目并核验；个人设置表保持为空。失败保留已提交的版本前缀，下次启动从当前版本+1继续，不删除已提交数据库。临时候选库发布仅用于显式旧 JSON 导入。已有 JSON 而没有数据库时提示先迁移；已有有效数据库时只以数据库为准。禁止创建空库遮住待迁移历史。
 
 ## 备份、回滚与关闭
 
@@ -161,14 +153,16 @@ SQL 的唯一维护位置为 [migration/](../migration/)，文档不复制 SQL�
 
 | 模块 | 当前职责 |
 | --- | --- |
-| `local/storage/database.ts` | 打开连接、配置 PRAGMA、版本检查、短事务与关闭 |
-| `migration/` | 有序 SQL、schema 执行器、启动前准备及工具短期锁 |
-| `local/storage/personal-settings-store.ts` | 单用户初始化、凭证及个人配置读写 |
-| `local/storage/workspace-store.ts` | 使用 SQL 映射，保留调用契约 |
-| `migration/legacy-json.ts` | 仅供离线导入/回退使用的旧格式校验与转换 |
-| `migration/cli.ts` | 预检、备份、导入、导出、核验及明确结果 |
-| `local/runtime.ts`、`local/vite-plugin.ts` | 组装业务服务、打开已准备数据库并关闭连接；不维护实例独占锁 |
-| `local/http/routes.ts` | 延续鉴权和 DTO，不写 SQL、不接收数据库路径 |
+| `src/storage/database.ts` | 打开连接、配置 PRAGMA、版本检查、短事务与关闭 |
+| `migration/` | 仅存放有序 SQL 文件 |
+| `src/sql/` | 独立迁移连接、文件/索引检查、逐版 up/down 和短期锁 |
+| `src/storage/prepare.ts` | 调用 migration.up，验证业务结构并初始化业务数据 |
+| `src/storage/personal-settings-store.ts` | 单用户初始化、凭证及个人配置读写 |
+| `src/storage/workspace-store.ts` | 使用 SQL 映射，保留调用契约 |
+| `src/storage/legacy-json.ts` | 仅供离线导入/回退使用的旧格式校验与转换 |
+| `src/storage/cli.ts` | 离线导入、导出及明确结果 |
+| `src/runtime.ts`、`src/server.ts` | 组装业务服务、通过存储模块自动初始化或升级数据库并关闭连接；不维护实例独占锁 |
+| `src/http/routes.ts` | 延续鉴权和 DTO，不写 SQL、不接收数据库路径 |
 
 故障验收要求：
 
@@ -179,7 +173,7 @@ SQL 的唯一维护位置为 [migration/](../migration/)，文档不复制 SQL�
 5. 迁移中断可重试，目标数据库不被覆盖；切换后的新增记录可通过离线导出完整回退。
 6. 登录/Origin/ACP 项目绑定检查不弱化；数据库、WAL、SHM 和备份均不能通过 HTTP 静态路径读取。
 7. 重启后能读到已提交历史；不自动恢复内存 Session、不批准旧权限请求。
-8. 启动前准备失败时不启动服务；重复准备不重复写入。直接打开缺失或旧版本数据库的 runtime 拒绝启动且不执行迁移。runtime 不创建或持有 `.storage.lock`。
+8. 启动初始化或升级失败时不启动服务；重复启动不重复写入。缺失数据库自动创建，旧版本自动升级，损坏或未知版本拒绝启动。完成初始化或升级后释放 `.storage.lock`。
 
 迁移执行、实际数据核验及测试结果统一记录在 [CHANGELOG.md](../CHANGELOG.md)。
 
@@ -187,7 +181,7 @@ SQL 的唯一维护位置为 [migration/](../migration/)，文档不复制 SQL�
 
 ## 升级与恢复边界
 
-当前 schema 版本为 3。v1/v2 数据库在启动前准备阶段的短期目录锁内执行剩余 SQL，保留原项目、会话、消息和版本 1 的导入摘要；v3 增加空的个人设置表，不导入旧账号。新数据库与升级数据库执行的结构版本必须一致。
+工作区、Agent 约束和个人设置对应版本 1、2、3。旧索引须按 specs/001 离线转换后，才能使用新的执行器顺序升级；保留原项目、会话、消息与旧导入摘要。个人设置迁移创建空表，不导入旧账号。新数据库与升级数据库应到达同一文件最大版本。
 
 升级前停止服务及离线命令，备份完整 `.local/web/`。低版本代码不能直接打开高版本数据库；回退时恢复完整备份及配套代码。升级后的新数据不在旧备份内，应另行保留。`storage:export` 只导出聊天数据，不包含个人凭证和配置，不能作为完整账号备份；完整恢复必须包含 SQLite 个人表。旧版 JSON 导入器不认识新增 Agent，含 AGY 会话的导出不能直接交给旧版程序。
 

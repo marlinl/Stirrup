@@ -4,10 +4,10 @@ import { createServer } from 'node:http';
 import { fileURLToPath } from 'node:url';
 import { test, type TestContext } from 'node:test';
 import { WebSocket } from 'ws';
-import { attachAcpBridge } from '../local/acp/bridge';
-import { agentLaunch } from '../local/acp/launch';
-import { openWebSocket } from '../src/acp/websocket';
-import { AGENT_IDS, AGENTS, type AgentId } from '../src/acp/agents';
+import { attachAcpBridge } from '../src/acp/bridge';
+import { agentLaunch } from '../src/acp/launch';
+import { openWebSocket } from '../web/acp/websocket';
+import { AGENT_IDS, AGENTS, type AgentId } from '../web/acp/agents';
 
 /** Start a real loopback bridge with a harmless byte-echo child in place of the chosen ACP agent. */
 async function setup(t: TestContext, agentId: AgentId = 'codex') {

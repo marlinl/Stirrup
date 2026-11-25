@@ -27,11 +27,11 @@ npm install
 npm run dev
 ```
 
-`npm run build` 构建前端，`npm run preview` 用于带本地 ACP 转接的构建预览。单独托管 `dist/` 无法操作本地代理。以上命令均使用本篇的新页面与本地登录入口。同一数据目录只运行一个 Web 实例。
+`npm run build` 构建服务端至 `dist/server/`、前端至 `dist/web/`；`npm start` 或 `npm run preview` 启动构建后的 Node.js 服务。单独托管前端静态文件无法操作代理。以上命令均使用本篇的新页面与本地登录入口。同一数据目录只运行一个 Web 实例。
 
 ### App 环境参数与启动约束
 
-`local/config/startup.ts` 与 `local/config/site.ts` 分别读取项目根目录 `.env` 的监听配置和站点配置；`vite.config.ts` 将其应用到 `npm run dev` 和 `npm run preview`。首次配置可参考 `.env.example`，已有 `.env` 只追加或修改所需启动参数，不覆盖无关配置。
+`src/config/startup.ts` 与 `src/config/site.ts` 分别读取项目根目录 `.env` 的监听配置和站点配置；`src/main.ts` 将其应用到开发与构建后的服务；Vite 只负责前端开发中间件和构建。首次配置可参考 `.env.example`，已有 `.env` 只追加或修改所需启动参数，不覆盖无关配置。
 
 | `.env` 参数 | 默认值 / 来源 | 约束与生效时机 |
 | --- | --- | --- |
@@ -52,10 +52,10 @@ STIRRUP_SITE_URL=https://chat.example.com
 启动行为必须满足：
 
 1. 监听参数采用「显式 `--host` / `--port` > 根目录 `.env` > 内置默认值」的优先级。根目录 `.env` 本身必须有效；命令行覆盖值经过同样校验。Shell 中同名 `STIRRUP_*`、`.env.local`、`.env.development`、`.env.production` 不覆盖本表配置。缺少 `.env` 可用默认监听配置启动并进入首次绑定流程；显式空地址/空端口、非法值或文件不可读取时直接退出，不静默回退。
-2. dev 与 preview 均强制 `strictPort`：端口被占用立即失败，不自动递增、不选择随机端口。绑定失败必须释放已打开的数据库连接。权限不足或系统不支持所选地址时使用实际监听错误，不伪装为启动成功。
+2. 开发与构建后的服务均使用严格端口绑定：端口被占用立即失败，不自动递增、不选择随机端口。绑定失败必须释放已打开的数据库连接。权限不足或系统不支持所选地址时使用实际监听错误，不伪装为启动成功。
 3. 显式 `STIRRUP_SITE_URL` 不随内部监听地址、端口或 CLI 覆盖而改变；缺省开发地址随实际监听端口计算。
 4. `STIRRUP_HOST` 控制绑定地址。HTTP 与 ACP 保留登录鉴权与严格同源校验。
-5. 不限制监听地址为回环地址。允许 `0.0.0.0`、`::`、网卡 IP 或主机名，以及 Vite 的无值 `--host` 通配监听；地址不包含协议、端口、路径或空白，主机解析和能否绑定由操作系统决定。
+5. 不限制监听地址为回环地址。允许 `0.0.0.0`、`::`、网卡 IP 或主机名，以及无值 `--host` 通配监听；地址不包含协议、端口、路径或空白，主机解析和能否绑定由操作系统决定。
 6. App 配置仅在服务端读取，不设置 `VITE_` 前缀、不注入前端 bundle、不通过设置接口回显原始 `.env`。未配置 Passkey 不阻止 HTTP 启动，但受保护的工作台接口仍不可访问。监听地址、端口与站点地址不热更新；个人设置在数据库中保存，按登录章节的读取时机生效。
 
 Agent 运行环境另行区分：`CODEX_API_KEY` / `OPENAI_API_KEY`、`DEEPSEEK_API_KEY`、`DSH_HOME`、`AGY_PATH` 由启动进程的环境继承给对应 Agent，或由 Agent 自己读取其本地配置；Stirrup 不自动把根目录 `.env` 的任意变量写入进程环境。它们不属于上述 App 监听/登录参数，也不应使用 `VITE_*` 暴露到浏览器。固定 Agent 命令与环境策略见 001、002、008。

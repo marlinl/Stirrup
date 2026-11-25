@@ -2,10 +2,10 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { build } from 'vite';
 import { JSDOM } from 'jsdom';
-import { sessionOptions } from '../src/acp/agents';
+import { sessionOptions } from '../web/acp/agents';
 import type { SessionConfigOption } from '@agentclientprotocol/sdk';
-import type { AcpClient } from '../src/acp/client';
-import type { WorkspaceController } from '../src/domain/workspace';
+import type { AcpClient } from '../web/acp/client';
+import type { WorkspaceController } from '../web/domain/workspace';
 
 /** Supply opaque grouped values, a real speed mapping and an unrelated boolean with a misleading name. */
 function options(): SessionConfigOption[] {
@@ -98,9 +98,9 @@ test('inline controls retain confirmed values, drafts and ownership across failu
         load(id) {
           if (id === entry)
             return `
-      import {createWorkspacePage} from '/src/ui/pages/workspace.ts';
-      import {WorkspaceController} from '/src/domain/workspace.ts';
-      import {loadPreferences} from '/src/app/preferences.ts';
+      import {createWorkspacePage} from '/web/ui/pages/workspace.ts';
+      import {WorkspaceController} from '/web/domain/workspace.ts';
+      import {loadPreferences} from '/web/app/preferences.ts';
       const controller=new WorkspaceController(async()=>({revision:1,updatedAt:1}),()=>page?.scheduleRender());
       controller.projects=[{id:'p',name:'Project',cwd:'/project'}];
       controller.conversations=['codex','dsh'].map((agentId,i)=>({id:'c'+i,projectId:'p',agentId,title:agentId,draft:'draft '+agentId,messages:[],revision:0,updatedAt:1}));

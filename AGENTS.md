@@ -1,34 +1,40 @@
-# Agent Policy
+# 项目协作约定
 
-## Activation
+以下规则适用于本仓库的所有贡献者和开发工具。
 
-This policy applies ONLY when the root model is `gpt-6-astra` or `gpt-5.6-sol`.
+## 项目定位与目录职责
 
-If the root model is `gpt-5.6-terra`, `gpt-5.6-luna`, or any other model:
+本项目是使用 npm 和 TypeScript 开发的 **Node.js 服务端项目**。服务进程负责启动、监听配置的地址与端口，提供 HTTP API、ACP WebSocket 和配套 Web 页面，管理认证、数据存储及 Agent 进程生命周期。
 
-* do NOT spawn subagents because of this policy
-* execute the task directly
-* ignore the delegation rules below
+Web 界面采用浏览器端渲染，通过同源 HTTP API 和 WebSocket 与服务端通信。项目目录及后续开发统一遵循以下结构：
 
-## Root: Astra / Sol
+| 路径 | 职责 |
+| --- | --- |
+| `src/` | Node.js 服务端源码；入口为 `src/main.ts`，负责启动和监听端口 |
+| `src/config/`、`src/http/` | 服务配置、HTTP 路由、请求校验及前端静态资源托管 |
+| `src/auth/`、`src/storage/`、`src/acp/` | 认证与会话、业务数据存储、ACP 转接和 Agent 进程管理 |
+| `web/` | 浏览器端源码与页面资源；HTML 入口为 `web/index.html`，脚本入口为 `web/main.ts` |
+| `web/app/` | 浏览器启动、页面路由与应用状态协调 |
+| `web/ui/pages/` | 登录页、对话工作台和设置页的页面渲染 |
+| `web/ui/components/`、`web/ui/settings/` | 通用交互组件及设置分类内容 |
+| `web/ui/styles/`、`web/ui/assets/` | 前端样式与静态素材 |
+| `shared/` | 前后端共用的纯数据类型及协议常量，不包含平台运行逻辑 |
+| `src/sql/` | 独立 SQLite migration 执行模块，负责文件检查、索引与逐版 up/down，不依赖业务存储 |
+| `migration/` | 按版本编号维护的成对 up/down SQL 文件；执行逻辑位于 `src/sql/`，业务初始化位于 `src/storage/` |
+| `.local/` | 服务运行数据，包括数据库和备份；由 Git 忽略 |
+| `dist/server/`、`dist/web/` | 服务端与前端构建产物；由 Git 忽略，不作为源码维护 |
 
-Root only plans, delegates, and validates.
+### 服务启动与依赖边界
 
-* MUST delegate substantial implementation to `terra`.
-* Use `luna` for small, deterministic, or mechanical work.
-* MUST NOT investigate/read substantial code before delegation.
-* Prefer one subagent owning the full loop: investigate → implement → test/debug → verify.
-* Do not split overlapping work across agents.
-* Parallelize only genuinely independent tasks.
-* Avoid duplicate investigation or verification.
-* Use independent review only for risky, complex, security-sensitive, concurrent, or cross-cutting changes.
-* Delegate fixes back to the same agent when practical.
-* Subagents execute directly and MUST NOT delegate further.
-* If delegation fails, report it; do not silently fall back to root implementation.
+- 服务端是运行入口，启动时读取根目录 `.env`，使用 `STIRRUP_HOST` 与 `STIRRUP_PORT` 监听；端口占用时明确失败，不自动换端口。外部站点身份继续由 `STIRRUP_SITE_URL` 定义。
+- 同一个服务入口提供页面、`/api/*` 和 `/acp/*`。Vite 负责前端开发与构建，前端开发工具接入服务时不能接管认证、数据库和 ACP 的生命周期。
+- 启动先校验配置、准备并验证数据库，再开放监听；失败时释放已创建资源。退出时停止接收请求，关闭会话和 Agent 连接，释放数据库及进程资源。
+- 新增服务端代码放在 `src/`，浏览器代码放在 `web/`。页面渲染与服务端路由分别维护；服务端不依赖 `web/` 的实现，浏览器不导入 `src/` 的实现。
+- 跨端复用的数据类型或协议常量放入 `shared/`，不通过导入另一端的业务模块实现复用。共享模块不得访问 DOM、Node.js 文件系统、进程环境或数据库。
+- 浏览器通过受控接口访问数据和 ACP，不直接读取服务端文件、数据库或环境配置。前端构建不得打包服务端实现、凭据或运行数据。
+- 目录分层和模块依赖的详细设计以 [004](docs/004_code_structure.md) 为准；调整目录结构时同步入口、构建配置、测试及文档引用。
 
-## 文档与变更记录规则（适用于所有模型）
-
-以下规则独立于上方的模型委派条件，所有执行者均须遵守。
+## 文档与变更记录
 
 ### CHANGELOG.md：操作与变更的唯一记录入口
 
@@ -47,3 +53,9 @@ Root only plans, delegates, and validates.
 - 区分验收标准与执行结果：应验证哪些行为属于设计；何时运行、通过多少测试、实际数据数量和人工检查结果属于 changelog。
 - 通用启动、迁移、回退步骤可以作为最终使用契约保留；某次实际执行步骤和结果必须写入 changelog。
 - `README.md` 保留项目介绍、使用入口和文档索引，通过链接指向设计与 changelog，不再维护另一份变更或验证日志。
+
+## 版本控制边界
+
+- IDE 本机配置、依赖、构建产物、测试覆盖率、运行数据、日志、系统临时文件及真实环境配置必须由根目录 `.gitignore` 排除；不得使用强制添加绕过忽略规则。
+- 当前排除范围包括 `.idea/`、`.vscode/`、`*.iml`、`node_modules/`、`dist/`、`coverage/`、`.local/`、`.env` 及其环境变体；保留不含凭据的 `.env.example` 模板。具体模式以 `.gitignore` 为准。
+- 已跟踪的排除文件应从 Git 索引移除，保留本机文件；不删除开发者本地配置，不改写历史提交。

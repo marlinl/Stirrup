@@ -1,4 +1,4 @@
-import { prepareStorage } from '../migration/prepare.ts';
+import { prepareStorage } from '../src/storage/prepare.ts';
 import assert from 'node:assert/strict';
 import { test, type TestContext } from 'node:test';
 import {
@@ -14,11 +14,11 @@ import { createServer, request as httpRequest } from 'node:http';
 import { once } from 'node:events';
 import { fileURLToPath } from 'node:url';
 import { WebSocket } from 'ws';
-import { WorkspaceStore } from '../local/storage/workspace-store.ts';
-import { WebRuntime } from '../local/runtime.ts';
-import { attachAcpBridge } from '../local/acp/bridge.ts';
+import { WorkspaceStore } from '../src/storage/workspace-store.ts';
+import { WebRuntime } from '../src/runtime.ts';
+import { attachAcpBridge } from '../src/acp/bridge.ts';
 import { testAuthenticator } from './fixtures/passkey.ts';
-import type { Conversation, Workspace } from '../src/domain/models.ts';
+import type { Conversation, Workspace } from '../shared/models.ts';
 
 /** Start an isolated web API and harmless stdio child, never configuring the user's real account. */
 async function setup(t: TestContext, externalOrigin?: string) {

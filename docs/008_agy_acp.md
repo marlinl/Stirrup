@@ -33,7 +33,7 @@ AGY_PATH="/absolute/path/to/agy" npm run dev
 
 ## 验收与代码
 
-入口配置位于 `local/acp/launch.ts`，注册位于 `src/acp/agents.ts`，持久化升级见 [005](005_sqlite_storage_design.md)。
+入口配置位于 `src/acp/launch.ts`，协议注册位于 `shared/agents.ts`，浏览器能力描述位于 `web/acp/agents.ts`，持久化升级见 [005](005_sqlite_storage_design.md)。
 
 ```sh
 npm run check

@@ -38,11 +38,11 @@ Stirrup 是 npm / TypeScript 项目，本篇定义第一个 ACP 接入：在本�
 
 ## 代码职责
 
-- `src/acp/client.ts`：使用 SDK 管理连接、会话、轮次、审批和关闭。
-- `src/acp/websocket.ts`：浏览器 WebSocket 与 SDK NDJSON 字节流之间的转换。
-- `src/ui/`：页面、消息、工具、计划与审批展示；`src/domain/workspace.ts`：会话操作和独立连接。
-- `local/acp/bridge.ts`、`local/acp/launch.ts`：固定 Agent 入口、stdio 转发、启动配置和进程清理；`local/runtime.ts` 负责登录及项目授权。
-- `local/vite-plugin.ts`：装配本地 HTTP 路由与 ACP 转接。完整目录见 [004 · 代码分层](004_code_structure.md)。
+- `web/acp/client.ts`：使用 SDK 管理连接、会话、轮次、审批和关闭。
+- `web/acp/websocket.ts`：浏览器 WebSocket 与 SDK NDJSON 字节流之间的转换。
+- `web/ui/`：页面、消息、工具、计划与审批展示；`web/domain/workspace.ts`：会话操作和独立连接。
+- `src/acp/bridge.ts`、`src/acp/launch.ts`：固定 Agent 入口、stdio 转发、启动配置和进程清理；`src/runtime.ts` 负责登录及项目授权。
+- `src/server.ts`：装配本地 HTTP 路由与 ACP 转接。完整目录见 [004 · 代码分层](004_code_structure.md)。
 
 入口的监听地址可配置，默认 `127.0.0.1`；地址与端口遵循 [003 的环境参数约束](003_web_app_design.md#app-环境参数与启动约束)。入口校验 Host / Origin，不接受页面指定任意命令。工作目录绑定已登记的项目；WebSocket 升级还校验登录及会话归属。适配器 stderr 留在启动终端；stdout 仅用于 ACP。断开后停止适配器及其进程组。
 
@@ -52,7 +52,7 @@ Stirrup 是 npm / TypeScript 项目，本篇定义第一个 ACP 接入：在本�
 
 项目需要 Node.js 24.9.0+ 和 npm。首次执行 `npm install`，然后 `npm run dev`，打开终端显示的本地地址。先绑定或使用本地 Passkey 登录，再选择 Codex，在项目旁新建会话；按需通过会话配置完成 Agent 认证，再发送消息。也可先在本地完成 Codex 登录，再建立会话。适配器依赖及其兼容 Codex 随 npm 安装，版本以 lockfile 为准；可通过启动进程的 `CODEX_PATH` 显式使用已有 Codex。
 
-`npm run check` 做类型检查，`npm test` 验证协议交互与异常路径，`npm run build` 构建页面，`npm run preview` 运行带本地转接的构建预览。单独托管 `dist/` 无法启动本地 Codex。
+`npm run check` 做类型检查，`npm test` 验证协议交互与异常路径，`npm run build` 构建服务端与页面，`npm run preview` 运行带本地转接的构建预览。单独托管 `dist/web/` 无法启动本地 Codex。
 
 真实验收需要已认证的 Codex：文本增量回复、工具审批选择、取消后最终 stopReason、中途断开与再次连接。模拟代理测试不能证明真实模型调用成功；执行结果统一记录在 [CHANGELOG.md](../CHANGELOG.md)。
 

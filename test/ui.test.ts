@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { readFileSync } from 'node:fs';
 import { build } from 'vite';
 import { JSDOM } from 'jsdom';
-import type { Conversation } from '../src/domain/models';
+import type { Conversation } from '../shared/models';
 
 /** Wait for asynchronous rendering without relying on animation or arbitrary long sleeps. */
 async function until(condition: () => boolean): Promise<void> {
@@ -20,6 +20,7 @@ test(
   async (t) => {
     const output = await build({
       configFile: false,
+      root: new URL('../web/', import.meta.url).pathname,
       logLevel: 'silent',
       build: { write: false },
     });
@@ -75,7 +76,7 @@ test(
       this.dispatchEvent(new window.Event('close'));
     };
     const doc = window.document;
-    doc.body.innerHTML = readFileSync(new URL('../index.html', import.meta.url), 'utf8').replace(
+    doc.body.innerHTML = readFileSync(new URL('../web/index.html', import.meta.url), 'utf8').replace(
       /<script[\s\S]*?<\/script>/g,
       '',
     );
@@ -240,6 +241,7 @@ test(
   async (t) => {
     const output = await build({
       configFile: false,
+      root: new URL('../web/', import.meta.url).pathname,
       logLevel: 'silent',
       build: { write: false },
     });
