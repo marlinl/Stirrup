@@ -301,3 +301,9 @@ Passkey 改造保留既有项目与会话文件。真实设备的通行密钥创
 - 本次生产构建（含类型检查）通过，完整测试 58/58 通过，差异空白检查通过；索引中无违反忽略规则的文件。真实 .env、.local 数据、依赖、构建产物及本机 IDE 文件保留，不纳入提交。
 - origin 为 git@github.com:msnode/Stirrup.git。SSH fetch 因 publickey 认证失败；使用现有 GitHub CLI 登录凭据临时通过 HTTPS fetch 同一仓库成功，未改写远端配置。获取后 HEAD 与 origin/master 一致，无需合并；后续以非强制方式推送。
 - 本次未修改或重启实际服务、未迁移真实数据库、未运行真实模型或设备 Passkey 验收。提交及推送结果在执行后追加。
+
+## 2026-11-25 08:32:22 +08:00 · 全部本地变更已推送
+
+- 功能与文档提交 f7faf53 已正常推送至 msnode/Stirrup 的 master，远端从 2d9cb16 快进到 f7faf53，未强制推送。
+- origin 配置保持 git@github.com:msnode/Stirrup.git；仅本次 Git 命令临时使用同仓库 HTTPS 地址及已有 GitHub CLI 凭据，解决 SSH publickey 认证失败。此记录单独提交同步远端。
+- 沿用本次构建和 58/58 测试通过结果；推送不代表新 migration 设计已实现或远端 CI/部署已验收。真实配置、数据库和 IDE 本机文件未纳入提交。
